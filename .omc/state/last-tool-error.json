@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"git add .gitignore && git commit -m \\\"$(cat <<'EOF'\\nInitial commit: Sloy project setup\\n\\n- FastAPI backend with basic health endpoints\\n- React + Vite + TypeScript frontend\\n- Project st...",
+  "error": "Exit code 128\nwarning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it\nAuthor identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email \"you@example.com\"\n  git config --global user.name \"Your Name\"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: unable to auto-detect email address (got 'Daniil@DESKTOP-KPQI1O4.(none)')",
+  "timestamp": "2026-03-12T11:46:45.226Z",
+  "retry_count": 2
+}
