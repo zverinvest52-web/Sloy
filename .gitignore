@@ -62,3 +62,10 @@ logs/
 # Test outputs
 backend/test_*.jpg
 backend/test_*.png
+backend/test_*.dxf
+backend/downloaded_*.dxf
+
+# Backend runtime directories
+backend/uploads/
+backend/processed/
+backend/dxf/
