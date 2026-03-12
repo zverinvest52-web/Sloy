@@ -6,8 +6,11 @@ Converts processed images to DXF format using ezdxf.
 import cv2
 import numpy as np
 import ezdxf
+import logging
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,10 +31,24 @@ class Circle:
 
 
 @dataclass
+class Rectangle:
+    """Represents a rectangle."""
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+@dataclass
 class CADElements:
     """Container for extracted CAD elements."""
     lines: List[Line]
     circles: List[Circle]
+    rectangles: List[Rectangle] = None
+
+    def __post_init__(self):
+        if self.rectangles is None:
+            self.rectangles = []
 
 
 class CADConverter:
@@ -268,7 +285,7 @@ class CADConverter:
             return True
 
         except Exception as e:
-            print(f"Error creating DXF: {e}")
+            logger.error(f"Error creating DXF: {e}")
             return False
 
     def process_image_to_dxf(
@@ -293,3 +310,55 @@ class CADConverter:
         success = self.to_dxf(elements, output_path)
 
         return success, elements if success else None
+
+    def export_to_dxf_r12(self, elements: CADElements, output_path: str) -> bool:
+        """
+        Export CAD elements to DXF R12 format using POLYLINE.
+
+        Args:
+            elements: CADElements to export
+            output_path: Path to save DXF file
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Create new DXF document in R12 format
+            doc = ezdxf.new('R12')
+            msp = doc.modelspace()
+
+            # Add layers
+            doc.layers.add('LINES', color=7)
+            doc.layers.add('CIRCLES', color=3)
+            doc.layers.add('RECTANGLES', color=5)
+
+            # Add lines as POLYLINE (R12 compatible)
+            for line in elements.lines:
+                points = [(line.x1, line.y1, 0), (line.x2, line.y2, 0)]
+                msp.add_polyline2d(points, dxfattribs={'layer': 'LINES'})
+
+            # Add rectangles as closed POLYLINE (R12 compatible)
+            for rect in elements.rectangles:
+                points = [
+                    (rect.x, rect.y, 0),
+                    (rect.x + rect.width, rect.y, 0),
+                    (rect.x + rect.width, rect.y + rect.height, 0),
+                    (rect.x, rect.y + rect.height, 0)
+                ]
+                msp.add_polyline2d(points, close=True, dxfattribs={'layer': 'RECTANGLES'})
+
+            # Add circles as CIRCLE
+            for circle in elements.circles:
+                msp.add_circle(
+                    (circle.x, circle.y),
+                    circle.radius,
+                    dxfattribs={'layer': 'CIRCLES'}
+                )
+
+            # Save DXF file
+            doc.saveas(output_path)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error creating DXF R12: {e}")
+            return False
