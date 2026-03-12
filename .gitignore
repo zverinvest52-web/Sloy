@@ -58,3 +58,7 @@ logs/
 
 # OMC
 .omc/
+
+# Test outputs
+backend/test_*.jpg
+backend/test_*.png
