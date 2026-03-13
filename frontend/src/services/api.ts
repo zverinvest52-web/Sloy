@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface ProcessResponse {
   success: boolean;
@@ -10,6 +10,7 @@ export interface ProcessResponse {
   dxf_url?: string;
   error?: string;
   metadata?: {
+    polylines_detected?: number;
     lines_detected: number;
     circles_detected: number;
   };

@@ -29,11 +29,11 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
       const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
         body: formData,
-        credentials: 'include', // Include cookies for CSRF
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const text = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}${text ? `: ${text}` : ''}`);
       }
 
       const data = await response.json();
@@ -48,7 +48,8 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
         onUploadError(data.error || 'Ошибка загрузки');
       }
     } catch (error) {
-      onUploadError('Ошибка сети. Попробуйте снова.');
+      const msg = error instanceof Error ? error.message : String(error);
+      onUploadError(msg || 'Ошибка сети. Попробуйте снова.');
     } finally {
       setIsUploading(false);
     }

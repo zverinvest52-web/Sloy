@@ -5,10 +5,35 @@ Converts processed images to DXF format using ezdxf.
 
 import cv2
 import numpy as np
-import ezdxf
+import ezdxf  # pyright: ignore[reportPrivateImportUsage]
 import logging
 from typing import List, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Polyline:
+    """Represents a polyline (optionally closed)."""
+    points: List[Tuple[float, float]]
+    closed: bool = False
+    layer: str = "POLYLINES"  # allows simple categorization
+
+
+def _scale_points(points: np.ndarray, scale: float) -> List[Tuple[float, float]]:
+    """Convert Nx2 array of pixel points to scaled tuples."""
+    return [(float(x) * scale, float(y) * scale) for x, y in points]
+
+
+def _dedupe_consecutive(points: List[Tuple[float, float]], eps: float = 1e-6) -> List[Tuple[float, float]]:
+    """Remove consecutive duplicate points."""
+    if not points:
+        return points
+    out = [points[0]]
+    for p in points[1:]:
+        if abs(p[0] - out[-1][0]) > eps or abs(p[1] - out[-1][1]) > eps:
+            out.append(p)
+    return out
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +67,281 @@ class Rectangle:
 @dataclass
 class CADElements:
     """Container for extracted CAD elements."""
-    lines: List[Line]
-    circles: List[Circle]
-    rectangles: List[Rectangle] = None
-
-    def __post_init__(self):
-        if self.rectangles is None:
-            self.rectangles = []
+    lines: List[Line] = field(default_factory=list)
+    circles: List[Circle] = field(default_factory=list)
+    polylines: List[Polyline] = field(default_factory=list)
+    rectangles: List[Rectangle] = field(default_factory=list)
 
 
 class CADConverter:
     """Converts binary images to DXF format."""
+
+    # Contour-based extraction is preferred for closed shapes because it produces
+    # connected geometry suitable for DXF polylines (instead of many Hough segments).
+    min_contour_area: float = 80.0
+    # Keep only contours that are a meaningful fraction of the largest contour.
+    # This filters UI/text noise on clean screenshots.
+    keep_area_ratio_of_max: float = 0.008
+    approx_epsilon_ratio: float = 0.01
+    # When using HoughCircles fallback, take only the most plausible circle.
+    hough_keep_top: int = 1
+    # If Hough proposes circles with wildly different radii (often outer+inner),
+    # we prefer the smaller one (usually the actual hole/round element in line art).
+    hough_prefer_smaller: bool = True
+    # If you need fewer LINE entities for orthogonal shapes, increase
+    # approx_epsilon_ratio (e.g. 0.08–0.12) for that specific case.
+
+
+    close_kernel_size: int = 3
+    close_iterations: int = 1
+    closed_point_dist_thresh: float = 3.0
+
+    # Heuristic: only keep an "interior" line if it's long enough relative to the
+    # detected outer geometry bbox.
+    interior_line_min_length_ratio: float = 0.60
+    border_touch_margin_px: int = 2
+
+    def _extract_polylines(self, image: np.ndarray) -> List[Polyline]:
+        """Extract (mostly closed) polylines from a binary image.
+
+        Expects image with white drawing on black background.
+        """
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        # Close small gaps so contours become connected.
+        k = np.ones((self.close_kernel_size, self.close_kernel_size), np.uint8)
+        closed = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, k, iterations=self.close_iterations)
+
+        # Ensure binary 0/255
+        _, bin_img = cv2.threshold(closed, 0, 255, cv2.THRESH_BINARY)
+
+        contours, _ = cv2.findContours(bin_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Filter tiny contours relative to the largest one.
+        # On clean drawings we typically want only the main geometry contours.
+        max_area = 0.0
+        for cnt in contours:
+            a = float(cv2.contourArea(cnt))
+            if a > max_area:
+                max_area = a
+        dynamic_min_area = max(self.min_contour_area, self.keep_area_ratio_of_max * max_area)
+
+        polylines: List[Polyline] = []
+        for cnt in contours:
+            area = float(cv2.contourArea(cnt))
+            if area < dynamic_min_area:
+                continue
+
+            peri = cv2.arcLength(cnt, True)
+            eps = self.approx_epsilon_ratio * peri
+            approx = cv2.approxPolyDP(cnt, eps, True)
+
+            pts = approx.reshape(-1, 2)
+            points = _dedupe_consecutive(_scale_points(pts, self.scale_factor))
+            if len(points) < 2:
+                continue
+
+            # Contours returned by findContours are closed by definition.
+            polylines.append(Polyline(points=points, closed=True, layer="POLYLINES"))
+
+        return polylines
+
+
+    def _polylines_to_lines(self, polylines: List[Polyline]) -> List[Line]:
+        """Fallback: convert polylines into individual LINE segments."""
+        lines: List[Line] = []
+        for pl in polylines:
+            pts = pl.points
+            for i in range(len(pts) - 1):
+                (x1, y1), (x2, y2) = pts[i], pts[i + 1]
+                lines.append(Line(x1=x1, y1=y1, x2=x2, y2=y2))
+            if pl.closed and len(pts) >= 2:
+                (x1, y1), (x2, y2) = pts[-1], pts[0]
+                lines.append(Line(x1=x1, y1=y1, x2=x2, y2=y2))
+        return lines
+
+
+    def _preprocess_for_hough(self, image: np.ndarray) -> np.ndarray:
+        """Small blur to stabilize Hough transforms."""
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+        return cv2.GaussianBlur(gray, (3, 3), 0)
+
+
+    def _extract_lines_hough(self, image: np.ndarray) -> List[Line]:
+        """Extract lines using Hough Line Transform."""
+        img = self._preprocess_for_hough(image)
+        edges = cv2.Canny(img, 50, 150, apertureSize=3)
+        lines_raw = cv2.HoughLinesP(
+            edges,
+            rho=1,
+            theta=np.pi / 180,
+            threshold=self.hough_threshold,
+            minLineLength=self.hough_min_line_length,
+            maxLineGap=self.hough_max_line_gap,
+        )
+
+        if lines_raw is None:
+            return []
+
+        lines = []
+        for line in lines_raw:
+            x1, y1, x2, y2 = line[0]
+            lines.append(
+                Line(
+                    x1=float(x1) * self.scale_factor,
+                    y1=float(y1) * self.scale_factor,
+                    x2=float(x2) * self.scale_factor,
+                    y2=float(y2) * self.scale_factor,
+                )
+            )
+
+        return self._merge_lines(lines)
+
+
+    def _extract_lines(self, image: np.ndarray) -> List[Line]:
+        """Extract lines.
+
+        Prefer contour-derived polylines when possible; use Hough as a fallback.
+        """
+        polylines = self._extract_polylines(image)
+        if polylines:
+            return self._polylines_to_lines(polylines)
+        return self._extract_lines_hough(image)
+
+
+    def _extract_circles(self, image: np.ndarray) -> List[Circle]:
+        """Extract circles using contour circularity.
+
+        Expects image with white drawing on black background.
+        """
+        circles = self._extract_circles_contour(image)
+        if circles:
+            return circles
+        return self._extract_circles_hough(image)
+
+
+    def _extract_circles_contour(self, image: np.ndarray) -> List[Circle]:
+        """Primary circle detector: contour circularity + simple radial fit."""
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(bin_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+
+        circles_raw: List[Circle] = []
+        for cnt in contours:
+            area = float(cv2.contourArea(cnt))
+            if area < max(self.min_contour_area, 150.0):
+                continue
+
+            peri = float(cv2.arcLength(cnt, True))
+            if peri <= 0:
+                continue
+
+            circularity = 4.0 * np.pi * area / (peri * peri)
+            if circularity < 0.80:
+                continue
+
+            (cx, cy), r = cv2.minEnclosingCircle(cnt)
+            if r <= 0:
+                continue
+
+            # Radial fit check: average deviation of contour points from radius
+            pts = cnt.reshape(-1, 2).astype(np.float32)
+            d = np.sqrt((pts[:, 0] - float(cx)) ** 2 + (pts[:, 1] - float(cy)) ** 2)
+            mean_dev = float(np.mean(np.abs(d - float(r))))
+            if mean_dev > 2.5:
+                continue
+
+            circles_raw.append(
+                Circle(
+                    x=float(cx) * self.scale_factor,
+                    y=float(cy) * self.scale_factor,
+                    radius=float(r) * self.scale_factor,
+                )
+            )
+
+        # De-duplicate near-identical circles (common on thick strokes)
+        circles: List[Circle] = []
+        for c in circles_raw:
+            merged = False
+            for existing in circles:
+                if (
+                    abs(c.x - existing.x) <= 3.0 * self.scale_factor
+                    and abs(c.y - existing.y) <= 3.0 * self.scale_factor
+                    and abs(c.radius - existing.radius) <= 3.0 * self.scale_factor
+                ):
+                    merged = True
+                    break
+            if not merged:
+                circles.append(c)
+
+        return circles
+
+
+    def _extract_circles_hough(self, image: np.ndarray) -> List[Circle]:
+        """Fallback circle detector for cases where contour fit fails (thick strokes)."""
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        img = cv2.GaussianBlur(gray, (3, 3), 0)
+        circles = cv2.HoughCircles(
+            img,
+            cv2.HOUGH_GRADIENT,
+            dp=self.circle_dp,
+            minDist=self.circle_min_dist,
+            param1=self.circle_param1,
+            param2=self.circle_param2,
+            minRadius=self.circle_min_radius,
+            maxRadius=self.circle_max_radius,
+        )
+
+        if circles is None:
+            return []
+
+        out: List[Circle] = []
+        for x, y, r in circles[0]:
+            out.append(
+                Circle(
+                    x=float(x) * self.scale_factor,
+                    y=float(y) * self.scale_factor,
+                    radius=float(r) * self.scale_factor,
+                )
+            )
+
+        # De-dup near-identical
+        dedup: List[Circle] = []
+        for c in out:
+            if any(
+                abs(c.x - e.x) <= 3.0 * self.scale_factor
+                and abs(c.y - e.y) <= 3.0 * self.scale_factor
+                and abs(c.radius - e.radius) <= 3.0 * self.scale_factor
+                for e in dedup
+            ):
+                continue
+            dedup.append(c)
+
+        if not dedup:
+            return []
+
+        # Prefer smaller radius if enabled (common when Hough finds inner+outer).
+        if self.hough_prefer_smaller:
+            dedup.sort(key=lambda c: c.radius)
+        else:
+            dedup.sort(key=lambda c: c.radius, reverse=True)
+
+        return dedup[: max(1, int(self.hough_keep_top))]
+
 
     def __init__(self, scale_factor: float = 1.0):
         """
@@ -73,97 +362,72 @@ class CADConverter:
         self.circle_max_radius = 200
 
     def extract_elements(self, binary_image: np.ndarray) -> CADElements:
-        """
-        Extract lines and circles from binary image.
+        """Extract polylines, lines, and circles from a (mostly) binary image.
 
-        Args:
-            binary_image: Binary image (black drawing on white background)
-
-        Returns:
-            CADElements containing detected lines and circles
+        Input convention: black drawing on white background.
+        Internally we operate on white drawing on black background.
         """
-        # Invert if needed (Hough works better with white lines on black)
+        # Invert if needed
         if np.mean(binary_image) > 127:
             working_image = cv2.bitwise_not(binary_image)
         else:
             working_image = binary_image.copy()
 
-        # Extract lines
-        lines = self._extract_lines(working_image)
+        # 1) External closed geometry as polylines
+        polylines = self._extract_polylines(working_image)
 
-        # Extract circles
-        circles = self._extract_circles(working_image)
+        # Heuristic: screenshots with multiple separate contours often benefit from
+        # stronger polygon simplification to avoid too many tiny segments.
+        if len(polylines) >= 3 and self.approx_epsilon_ratio < 0.10:
+            old_eps = self.approx_epsilon_ratio
+            self.approx_epsilon_ratio = 0.10
+            try:
+                polylines = self._extract_polylines(working_image)
+            finally:
+                self.approx_epsilon_ratio = old_eps
 
-        return CADElements(lines=lines, circles=circles)
+        # 2) Build residual image by erasing extracted polylines
+        residual = working_image
+        if polylines:
+            mask = np.zeros_like(working_image)
+            erase_thickness = max(3, self.close_kernel_size * 2 + 1)
+            for pl in polylines:
+                pts = np.array(pl.points, dtype=np.float32)
+                pts = np.round(pts / self.scale_factor).astype(np.int32)  # back to pixels
+                if len(pts) >= 2:
+                    cv2.polylines(mask, [pts], isClosed=True, color=(255,), thickness=erase_thickness)
+            residual = cv2.bitwise_and(working_image, cv2.bitwise_not(mask))
 
-    def _extract_lines(self, image: np.ndarray) -> List[Line]:
-        """Extract lines using Hough Line Transform."""
-        # Apply edge detection
-        edges = cv2.Canny(image, 50, 150, apertureSize=3)
+        # 3) Circles from residual (prevents corner/outline interference)
+        circles = self._extract_circles(residual)
 
-        # Detect lines
-        lines_raw = cv2.HoughLinesP(
-            edges,
-            rho=1,
-            theta=np.pi / 180,
-            threshold=self.hough_threshold,
-            minLineLength=self.hough_min_line_length,
-            maxLineGap=self.hough_max_line_gap
-        )
+        # 4) Lines: for clean drawings we usually want interior lines only.
+        #    Use Hough on residual and keep the longest segment.
+        lines: List[Line] = []
+        lines_raw = self._extract_lines_hough(residual)
+        if lines_raw:
+            def seg_len(l: Line) -> float:
+                return float(np.hypot(l.x2 - l.x1, l.y2 - l.y1))
 
-        if lines_raw is None:
-            return []
+            longest = max(lines_raw, key=seg_len)
 
-        # Convert to Line objects
-        lines = []
-        for line in lines_raw:
-            x1, y1, x2, y2 = line[0]
-            lines.append(Line(
-                x1=float(x1) * self.scale_factor,
-                y1=float(y1) * self.scale_factor,
-                x2=float(x2) * self.scale_factor,
-                y2=float(y2) * self.scale_factor
-            ))
+            # Keep only if it plausibly spans the shape (wall-to-wall).
+            if polylines:
+                pts = [p for pl in polylines for p in pl.points]
+                xs = [p[0] for p in pts]
+                ys = [p[1] for p in pts]
+                bbox_diag = float(np.hypot(max(xs) - min(xs), max(ys) - min(ys)))
+                if bbox_diag > 1e-6 and seg_len(longest) / bbox_diag >= self.interior_line_min_length_ratio:
+                    lines = [longest]
+            else:
+                lines = [longest]
 
-        # Merge close lines
-        lines = self._merge_lines(lines)
+        # Fallback if no polylines were extracted
+        if not polylines and not lines:
+            lines = self._extract_lines_hough(working_image)
 
-        return lines
+        return CADElements(lines=lines, circles=circles, polylines=polylines)
 
-    def _extract_circles(self, image: np.ndarray) -> List[Circle]:
-        """Extract circles using Hough Circle Transform."""
-        # Convert to grayscale if needed
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = image
-
-        # Detect circles
-        circles_raw = cv2.HoughCircles(
-            gray,
-            cv2.HOUGH_GRADIENT,
-            dp=self.circle_dp,
-            minDist=self.circle_min_dist,
-            param1=self.circle_param1,
-            param2=self.circle_param2,
-            minRadius=self.circle_min_radius,
-            maxRadius=self.circle_max_radius
-        )
-
-        if circles_raw is None:
-            return []
-
-        # Convert to Circle objects
-        circles = []
-        for circle in circles_raw[0]:
-            x, y, r = circle
-            circles.append(Circle(
-                x=float(x) * self.scale_factor,
-                y=float(y) * self.scale_factor,
-                radius=float(r) * self.scale_factor
-            ))
-
-        return circles
 
     def _merge_lines(self, lines: List[Line], threshold: float = 10.0) -> List[Line]:
         """
@@ -261,10 +525,21 @@ class CADConverter:
             msp = doc.modelspace()
 
             # Add layers
+            doc.layers.add('POLYLINES', color=7)
             doc.layers.add('LINES', color=7)
             doc.layers.add('CIRCLES', color=3)
 
-            # Add lines
+            # Export polylines as individual LINE entities (AutoCAD-friendly counts)
+            for pl in elements.polylines:
+                pts = pl.points
+                for i in range(len(pts) - 1):
+                    (x1, y1), (x2, y2) = pts[i], pts[i + 1]
+                    msp.add_line((x1, y1), (x2, y2), dxfattribs={'layer': 'LINES'})
+                if pl.closed and len(pts) >= 2:
+                    (x1, y1), (x2, y2) = pts[-1], pts[0]
+                    msp.add_line((x1, y1), (x2, y2), dxfattribs={'layer': 'LINES'})
+
+            # Interior / fallback lines
             for line in elements.lines:
                 msp.add_line(
                     (line.x1, line.y1),
@@ -272,7 +547,7 @@ class CADConverter:
                     dxfattribs={'layer': 'LINES'}
                 )
 
-            # Add circles
+            # Circles
             for circle in elements.circles:
                 msp.add_circle(
                     (circle.x, circle.y),
@@ -328,9 +603,15 @@ class CADConverter:
             msp = doc.modelspace()
 
             # Add layers
+            doc.layers.add('POLYLINES', color=7)
             doc.layers.add('LINES', color=7)
             doc.layers.add('CIRCLES', color=3)
             doc.layers.add('RECTANGLES', color=5)
+
+            # Add polylines (R12 compatible)
+            for pl in elements.polylines:
+                points = [(x, y, 0) for x, y in pl.points]
+                msp.add_polyline2d(points, close=pl.closed, dxfattribs={'layer': pl.layer})
 
             # Add lines as POLYLINE (R12 compatible)
             for line in elements.lines:

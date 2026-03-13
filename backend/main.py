@@ -26,8 +26,10 @@ logger = logging.getLogger(__name__)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
+    # In the browser, CORS failures often surface as a generic "network error".
+    # Allow any localhost/127.0.0.1 dev port.
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -115,14 +117,15 @@ async def upload_image(file: UploadFile = File(...)):
     """
     try:
         # Validate file type
-        if not file.content_type.startswith("image/"):
+        if not (file.content_type or "").startswith("image/"):
             raise HTTPException(400, "File must be an image")
 
         # Generate unique ID
         file_id = str(uuid.uuid4())
 
         # Save uploaded file
-        original_path = UPLOAD_DIR / f"{file_id}_original{Path(file.filename).suffix}"
+        suffix = Path(file.filename).suffix if file.filename else ".png"
+        original_path = UPLOAD_DIR / f"{file_id}_original{suffix}"
         with original_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
@@ -165,6 +168,7 @@ async def upload_image(file: UploadFile = File(...)):
             processed_url=f"/api/files/{processed_path.name}",
             dxf_url=f"/api/download/{file_id}",
             metadata={
+                "polylines_detected": len(elements.polylines),
                 "lines_detected": len(elements.lines),
                 "circles_detected": len(elements.circles)
             }

@@ -40,6 +40,7 @@ def test_cad_converter():
 
     elements = converter.extract_elements(image)
 
+    print(f"[OK] Found {len(elements.polylines)} polylines")
     print(f"[OK] Found {len(elements.lines)} lines")
     print(f"[OK] Found {len(elements.circles)} circles")
 

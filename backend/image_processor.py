@@ -50,20 +50,29 @@ class ImageProcessor:
 
             original = image.copy()
 
-            # Step 1: Detect paper contour
+            # Step 1: Detect paper contour (optional)
             contour = self.detect_paper_contour(image)
+
+            # If we can't find a paper quad (common for clean screenshots), skip
+            # perspective correction and just binarize the full image.
             if contour is None:
+                processed = self.extract_drawing(image)
                 return ProcessingResult(
-                    success=False,
-                    error="Failed to detect paper contour"
+                    success=True,
+                    processed_image=processed,
+                    original_image=original,
+                    contour=None,
                 )
 
             # Step 2: Apply perspective transform
             warped = self.apply_perspective_transform(image, contour)
             if warped is None:
+                processed = self.extract_drawing(image)
                 return ProcessingResult(
-                    success=False,
-                    error="Failed to apply perspective transform"
+                    success=True,
+                    processed_image=processed,
+                    original_image=original,
+                    contour=contour,
                 )
 
             # Step 3: Extract drawing (binarization)

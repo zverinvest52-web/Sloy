@@ -20,7 +20,8 @@ function App() {
 
   const handleDownload = () => {
     if (result?.dxf_url) {
-      const url = `http://localhost:8000${result.dxf_url}`;
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const url = `${API_URL}${result.dxf_url}`;
       window.open(url, '_blank');
     }
   };
