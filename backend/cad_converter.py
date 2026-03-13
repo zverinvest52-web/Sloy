@@ -105,6 +105,15 @@ class CADConverter:
     interior_line_min_length_ratio: float = 0.60
     border_touch_margin_px: int = 2
 
+    # Reject stray Hough lines that are not actually inside the detected outer shape.
+    interior_line_outside_margin_px: int = 3
+    interior_line_min_inside_ratio: float = 0.90
+    interior_line_allow_diagonal: bool = False
+
+    # If we do allow diagonals, require them to be close to 45° (typical corner/brace),
+    # not arbitrary angles from noise.
+    interior_line_diagonal_tolerance_degrees: float = 7.0
+
     # Snap nearly-horizontal/vertical lines to perfect axis alignment.
     snap_angle_degrees: float = 3.0
 
@@ -390,8 +399,13 @@ class CADConverter:
             if not merged:
                 circles.append(c)
 
-        return circles
+        if not circles:
+            return []
 
+        # For Sloy drawings we typically expect a single circle; thick strokes can
+        # produce inner+outer contours. Keep only the most plausible one.
+        circles.sort(key=lambda c: c.radius, reverse=(not self.hough_prefer_smaller))
+        return circles[:1]
 
     def _extract_circles_hough(self, image: np.ndarray) -> List[Circle]:
         """Fallback circle detector for cases where contour fit fails (thick strokes)."""
@@ -517,17 +531,53 @@ class CADConverter:
 
             longest = max(lines_raw, key=seg_len)
 
-            # Keep only if it plausibly spans the shape (wall-to-wall).
+            # Keep only if it plausibly spans the shape (wall-to-wall) and is actually inside it.
             if polylines:
                 pts = [p for pl in polylines for p in pl.points]
                 xs = [p[0] for p in pts]
                 ys = [p[1] for p in pts]
                 bbox_diag = float(np.hypot(max(xs) - min(xs), max(ys) - min(ys)))
+
+                cand = self._snap_and_extend_interior_line(longest, polylines)
+
                 if bbox_diag > 1e-6 and seg_len(longest) / bbox_diag >= self.interior_line_min_length_ratio:
-                    lines = [self._snap_and_extend_interior_line(longest, polylines)]
+                    # Reject diagonal noise unless explicitly allowed.
+                    ang = self._line_angle_rad(cand)
+                    ang = float((ang + np.pi) % np.pi)
+                    tol_axis = float(np.deg2rad(self.snap_angle_degrees))
+
+                    is_h = min(ang, abs(np.pi - ang)) <= tol_axis
+                    is_v = abs((np.pi / 2.0) - ang) <= tol_axis
+
+                    if (not self.interior_line_allow_diagonal) and (not is_h) and (not is_v):
+                        cand = None
+                    elif (not is_h) and (not is_v):
+                        # diagonal allowed: only keep near 45°
+                        tol45 = float(np.deg2rad(self.interior_line_diagonal_tolerance_degrees))
+                        if abs((np.pi / 4.0) - ang) > tol45 and abs((3.0 * np.pi / 4.0) - ang) > tol45:
+                            cand = None
+
+                    if cand is not None:
+                        min_x, max_x = float(min(xs)), float(max(xs))
+                        min_y, max_y = float(min(ys)), float(max(ys))
+                        m = float(self.interior_line_outside_margin_px) * self.scale_factor
+
+                        def inside_ratio(l: Line) -> float:
+                            # sample points along line and require they lie in bbox (with margin)
+                            n = 40
+                            inside = 0
+                            for i in range(n + 1):
+                                t = i / n
+                                x = l.x1 + (l.x2 - l.x1) * t
+                                y = l.y1 + (l.y2 - l.y1) * t
+                                if (min_x - m) <= x <= (max_x + m) and (min_y - m) <= y <= (max_y + m):
+                                    inside += 1
+                            return inside / float(n + 1)
+
+                        if inside_ratio(cand) >= self.interior_line_min_inside_ratio:
+                            lines = [cand]
             else:
                 lines = [longest]
-
         # Fallback if no polylines were extracted
         if not polylines and not lines:
             lines = self._extract_lines_hough(working_image)
