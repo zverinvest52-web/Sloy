@@ -96,58 +96,34 @@ class ImageProcessor:
             )
 
     def detect_paper_contour(self, image: np.ndarray) -> Optional[np.ndarray]:
-        """
-        Detect the contour of the paper sheet.
+        """Detect a paper-like quadrilateral for perspective correction.
 
-        Args:
-            image: Input image
-
-        Returns:
-            Contour points or None if not found
+        The goal is to work for real photos (paper may not touch borders) while
+        avoiding false warps on clean CAD screenshots/UI frames.
         """
-        # Convert to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        # Apply Gaussian blur
-        blurred = cv2.GaussianBlur(gray, self.gaussian_kernel, 0)
-
-        # Edge detection
-        edges = cv2.Canny(blurred, self.canny_threshold1, self.canny_threshold2)
-
-        # Find contours
-        contours, _ = cv2.findContours(
-            edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-
-        if not contours:
-            return None
-
-        # Sort by area and get the largest
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)
-
         h, w = gray.shape[:2]
 
-        for contour in contours[:5]:  # Check top 5 largest
-            # Approximate contour
-            peri = cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, self.poly_epsilon * peri, True)
-
-            # Check if it's a quadrilateral with sufficient area
+        def score_quad(approx: np.ndarray) -> Optional[float]:
             if len(approx) != 4 or cv2.contourArea(approx) <= self.min_contour_area:
-                continue
-
-            # Heuristic: treat as "paper" only if it is a large, convex quad.
-            # This prevents warping on clean CAD screenshots where the largest quad
-            # might be the drawing's bounding box (which would create black borders).
+                return None
             if not cv2.isContourConvex(approx):
-                continue
+                return None
 
             quad_area = float(cv2.contourArea(approx))
             area_ratio = quad_area / float(w * h)
-            if area_ratio < 0.65:
-                continue
+            if area_ratio < 0.25:
+                return None
 
-            # Require being near the image border (typical for a sheet/photo)
+            mask = np.zeros((h, w), dtype=np.uint8)
+            cv2.drawContours(mask, [approx], -1, (255,), thickness=-1)
+            inside_mean = float(cv2.mean(gray, mask=mask)[0])
+            if inside_mean < 150.0:
+                return None
+
+            outside_mean = float(cv2.mean(gray, mask=cv2.bitwise_not(mask))[0])
+            contrast = inside_mean - outside_mean
+
             x, y, bw, bh = cv2.boundingRect(approx)
             border_tol = int(0.03 * min(w, h))
             touches_border = (
@@ -156,21 +132,53 @@ class ImageProcessor:
                 or (x + bw) >= (w - 1 - border_tol)
                 or (y + bh) >= (h - 1 - border_tol)
             )
-            if not touches_border:
+
+            # CAD screenshots tend to have globally bright backgrounds (low contrast).
+            if outside_mean > 200.0 and contrast < 20.0:
+                return None
+
+            # Require either strong contrast (photo on darker background) or at least
+            # some contrast + border touch (paper filling the frame).
+            if (contrast < 25.0) and (not (touches_border and contrast >= 10.0)):
+                return None
+
+            return area_ratio * max(0.0, contrast)
+
+        candidates: List[np.ndarray] = []
+
+        # Pass 1: edges-based candidates (good for high-contrast photos)
+        blurred = cv2.GaussianBlur(gray, self.gaussian_kernel, 0)
+        edges = cv2.Canny(blurred, self.canny_threshold1, self.canny_threshold2)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        candidates.extend(contours)
+
+        # Pass 2: brightness segmentation candidates (good for low-contrast / blurry photos)
+        _, th = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Ensure paper (bright) is foreground
+        if float(np.mean(gray[th == 255])) < float(np.mean(gray[th == 0])):
+            th = cv2.bitwise_not(th)
+        th = cv2.morphologyEx(th, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+        contours2, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        candidates.extend(contours2)
+
+        if not candidates:
+            return None
+
+        candidates = sorted(candidates, key=cv2.contourArea, reverse=True)
+
+        best_score = None
+        best_quad = None
+        for contour in candidates[:12]:
+            peri = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, self.poly_epsilon * peri, True)
+            s = score_quad(approx)
+            if s is None:
                 continue
+            if best_score is None or s > best_score:
+                best_score = s
+                best_quad = approx
 
-
-            # Paper is typically bright. If the quad region is not mostly white,
-            # it's likely the drawing bbox or a UI frame -> skip warping.
-            mask = np.zeros((h, w), dtype=np.uint8)
-            cv2.drawContours(mask, [approx], -1, (255,), thickness=-1)
-            inside_mean = float(cv2.mean(gray, mask=mask)[0])
-            if inside_mean < 180.0:
-                continue
-
-            return approx
-
-        return None
+        return best_quad
 
     def apply_perspective_transform(
         self, image: np.ndarray, contour: np.ndarray

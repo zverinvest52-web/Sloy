@@ -513,6 +513,48 @@ class CADConverter:
         # 1) External closed geometry as polylines
         polylines = self._extract_polylines(working_image)
 
+        # If a "circle" got extracted as a polyline (common on noisy photos / thick strokes),
+        # promote it into a true Circle so DXF/preview use an actual arc entity instead of
+        # straight segments.
+        circles_from_polylines: List[Circle] = []
+        if polylines:
+            kept_polylines: List[Polyline] = []
+            for pl in polylines:
+                pts_scaled = pl.points
+                if len(pts_scaled) < 8:
+                    kept_polylines.append(pl)
+                    continue
+
+                pts_px = (np.array(pts_scaled, dtype=np.float32) / float(self.scale_factor)).reshape(-1, 2)
+                (cx, cy), r = cv2.minEnclosingCircle(pts_px)
+                if r <= 0:
+                    kept_polylines.append(pl)
+                    continue
+
+                # Fit quality: average radial deviation in pixels
+                d = np.sqrt((pts_px[:, 0] - float(cx)) ** 2 + (pts_px[:, 1] - float(cy)) ** 2)
+                mean_dev = float(np.mean(np.abs(d - float(r))))
+
+                # Also require near-square bbox (helps reject rounded rectangles)
+                x, y, w, h = cv2.boundingRect(pts_px.astype(np.int32))
+                ar = float(w) / float(h) if h > 0 else 0.0
+
+                if mean_dev <= 2.5 and 0.85 <= ar <= 1.15:
+                    circles_from_polylines.append(
+                        Circle(
+                            x=float(cx) * self.scale_factor,
+                            y=float(cy) * self.scale_factor,
+                            radius=float(r) * self.scale_factor,
+                        )
+                    )
+                else:
+                    kept_polylines.append(pl)
+
+            # If we found any, keep only one most plausible circle (consistent with existing behavior)
+            if circles_from_polylines:
+                circles_from_polylines.sort(key=lambda c: c.radius)
+                circles_from_polylines = circles_from_polylines[:1]
+                polylines = kept_polylines
 
         # 2) Build residual image by erasing extracted polylines
         residual = working_image
@@ -526,66 +568,96 @@ class CADConverter:
                     cv2.polylines(mask, [pts], isClosed=True, color=(255,), thickness=erase_thickness)
             residual = cv2.bitwise_and(working_image, cv2.bitwise_not(mask))
 
-        # 3) Circles from residual (prevents corner/outline interference)
+        # 3) Circles from residual (prevents corner/outline interference).
+        # If we fail to find circles in residual (e.g., circle got merged into the outer contour
+        # on noisy photos), fall back to detecting on the full working image.
         circles = self._extract_circles(residual)
+        if not circles:
+            circles = self._extract_circles(working_image)
 
-        # 4) Lines: for clean drawings we usually want interior lines only.
-        #    Use Hough on residual and keep the longest segment.
+        # Merge any circles we promoted from polylines.
+        if circles_from_polylines:
+            circles = circles_from_polylines
+
+        # 4) Lines: prefer interior lines, but keep multiple good candidates (not just the longest).
+        #    This helps photos where Hough splits the same "wall-to-wall" line into segments.
         lines: List[Line] = []
         lines_raw = self._extract_lines_hough(residual)
         if lines_raw:
             def seg_len(l: Line) -> float:
                 return float(np.hypot(l.x2 - l.x1, l.y2 - l.y1))
 
-            longest = max(lines_raw, key=seg_len)
+            # Sort long-to-short and evaluate several candidates.
+            lines_raw = sorted(lines_raw, key=seg_len, reverse=True)
 
-            # Keep only if it plausibly spans the shape (wall-to-wall) and is actually inside it.
             if polylines:
                 pts = [p for pl in polylines for p in pl.points]
                 xs = [p[0] for p in pts]
                 ys = [p[1] for p in pts]
                 bbox_diag = float(np.hypot(max(xs) - min(xs), max(ys) - min(ys)))
 
-                cand = self._snap_and_extend_interior_line(longest, polylines)
+                min_x, max_x = float(min(xs)), float(max(xs))
+                min_y, max_y = float(min(ys)), float(max(ys))
+                m = float(self.interior_line_outside_margin_px) * self.scale_factor
 
-                if bbox_diag > 1e-6 and seg_len(longest) / bbox_diag >= self.interior_line_min_length_ratio:
-                    # Reject diagonal noise unless explicitly allowed.
-                    ang = self._line_angle_rad(cand)
-                    ang = float((ang + np.pi) % np.pi)
-                    tol_axis = float(np.deg2rad(self.snap_angle_degrees))
+                def inside_ratio(l: Line) -> float:
+                    n = 40
+                    inside = 0
+                    for i in range(n + 1):
+                        t = i / n
+                        x = l.x1 + (l.x2 - l.x1) * t
+                        y = l.y1 + (l.y2 - l.y1) * t
+                        if (min_x - m) <= x <= (max_x + m) and (min_y - m) <= y <= (max_y + m):
+                            inside += 1
+                    return inside / float(n + 1)
 
-                    is_h = min(ang, abs(np.pi - ang)) <= tol_axis
-                    is_v = abs((np.pi / 2.0) - ang) <= tol_axis
+                def collect(min_len_ratio: float) -> List[Line]:
+                    out: List[Line] = []
+                    for raw in lines_raw[:50]:
+                        cand = self._snap_and_extend_interior_line(raw, polylines)
+                        if cand is None:
+                            continue
 
-                    if (not self.interior_line_allow_diagonal) and (not is_h) and (not is_v):
-                        cand = None
-                    elif (not is_h) and (not is_v):
-                        # diagonal allowed: only keep near 45°
-                        tol45 = float(np.deg2rad(self.interior_line_diagonal_tolerance_degrees))
-                        if abs((np.pi / 4.0) - ang) > tol45 and abs((3.0 * np.pi / 4.0) - ang) > tol45:
-                            cand = None
+                        if bbox_diag > 1e-6 and seg_len(raw) / bbox_diag < min_len_ratio:
+                            continue
 
-                    if cand is not None:
-                        min_x, max_x = float(min(xs)), float(max(xs))
-                        min_y, max_y = float(min(ys)), float(max(ys))
-                        m = float(self.interior_line_outside_margin_px) * self.scale_factor
+                        # Reject diagonal noise unless explicitly allowed.
+                        ang = self._line_angle_rad(cand)
+                        ang = float((ang + np.pi) % np.pi)
+                        tol_axis = float(np.deg2rad(self.snap_angle_degrees))
 
-                        def inside_ratio(l: Line) -> float:
-                            # sample points along line and require they lie in bbox (with margin)
-                            n = 40
-                            inside = 0
-                            for i in range(n + 1):
-                                t = i / n
-                                x = l.x1 + (l.x2 - l.x1) * t
-                                y = l.y1 + (l.y2 - l.y1) * t
-                                if (min_x - m) <= x <= (max_x + m) and (min_y - m) <= y <= (max_y + m):
-                                    inside += 1
-                            return inside / float(n + 1)
+                        is_h = min(ang, abs(np.pi - ang)) <= tol_axis
+                        is_v = abs((np.pi / 2.0) - ang) <= tol_axis
 
-                        if inside_ratio(cand) >= self.interior_line_min_inside_ratio:
-                            lines = [cand]
+                        if (not self.interior_line_allow_diagonal) and (not is_h) and (not is_v):
+                            continue
+                        if (not is_h) and (not is_v):
+                            tol45 = float(np.deg2rad(self.interior_line_diagonal_tolerance_degrees))
+                            if abs((np.pi / 4.0) - ang) > tol45 and abs((3.0 * np.pi / 4.0) - ang) > tol45:
+                                continue
+
+                        if inside_ratio(cand) < self.interior_line_min_inside_ratio:
+                            continue
+
+                        out.append(cand)
+                    return out
+
+                lines = collect(self.interior_line_min_length_ratio)
+
+                # Photo fallback: if nothing survived the strict length ratio, relax it.
+                if not lines:
+                    lines = collect(0.20)
+
+                # Merge collinear/near-duplicate segments.
+                lines = self._merge_lines(lines)
+
+                # If we ended up with multiple nearly-identical lines (common on thick strokes),
+                # keep only the longest after merging.
+                if len(lines) > 1:
+                    lines = [max(lines, key=seg_len)]
             else:
-                lines = [longest]
+                lines = [lines_raw[0]]
+
         # Fallback if no polylines were extracted
         if not polylines and not lines:
             lines = self._extract_lines_hough(working_image)
