@@ -14,8 +14,14 @@ import numpy as np
 from pathlib import Path
 import shutil
 
-from image_processor import ImageProcessor, ProcessingResult
-from cad_converter import CADConverter, CADElements, Line, Circle, Rectangle
+try:
+    # When running with `uvicorn main:app` from within the backend directory
+    from image_processor import ImageProcessor, ProcessingResult
+    from cad_converter import CADConverter, CADElements, Line, Circle, Rectangle
+except ModuleNotFoundError:
+    # When running with `uvicorn backend.main:app` from repo root
+    from backend.image_processor import ImageProcessor, ProcessingResult
+    from backend.cad_converter import CADConverter, CADElements, Line, Circle, Rectangle
 
 app = FastAPI(title="Sloy API", version="1.0.0")
 
@@ -47,8 +53,13 @@ class ProcessResponse(BaseModel):
     """Response model for processing endpoint."""
     success: bool
     id: str
+    # For preview: "original" should already be perspective-corrected when available.
     original_url: Optional[str] = None
     processed_url: Optional[str] = None
+    # Raster preview drawn from the same extracted CAD elements that go into the DXF.
+    vector_preview_url: Optional[str] = None
+    # Explicit field for the frontend; currently we also set original_url to this value.
+    warped_original_url: Optional[str] = None
     dxf_url: Optional[str] = None
     error: Optional[str] = None
     metadata: Optional[dict] = None
@@ -144,6 +155,14 @@ async def upload_image(file: UploadFile = File(...)):
         processed_path = PROCESSED_DIR / f"{file_id}_processed.png"
         cv2.imwrite(str(processed_path), result.processed_image)
 
+        # If we had perspective correction, save the warped image and use it as the
+        # "original" for preview (so original vs vector are aligned).
+        warped_path = PROCESSED_DIR / f"{file_id}_warped.png"
+        if result.warped_original_image is not None:
+            cv2.imwrite(str(warped_path), result.warped_original_image)
+        else:
+            warped_path = original_path
+
         # Convert to DXF
         converter = CADConverter(scale_factor=0.1)
         dxf_path = DXF_DIR / f"{file_id}.dxf"
@@ -153,23 +172,64 @@ async def upload_image(file: UploadFile = File(...)):
             str(dxf_path)
         )
 
-        if not success:
+        if not success or elements is None:
             return ProcessResponse(
                 success=False,
                 id=file_id,
                 error="Failed to generate DXF"
             )
 
+        # Vector preview: rasterize the *same* extracted primitives used for the DXF.
+        # Render in image coordinate system (Y down) so it aligns with the preview original.
+        vector_preview_path = PROCESSED_DIR / f"{file_id}_vector_preview.png"
+        preview_h, preview_w = result.processed_image.shape[:2]
+        preview = np.full((preview_h, preview_w), 255, dtype=np.uint8)
+
+        sf = float(converter.scale_factor)
+        if sf <= 0:
+            sf = 1.0
+
+        def to_px(x: float, y: float) -> tuple[int, int]:
+            return (int(round(x / sf)), int(round(y / sf)))
+
+        # Outer geometry (polylines exported as LINEs in DXF)
+        for pl in elements.polylines:
+            pts = pl.points
+            for i in range(len(pts) - 1):
+                (x1, y1), (x2, y2) = pts[i], pts[i + 1]
+                cv2.line(preview, to_px(x1, y1), to_px(x2, y2), (0,), 2, lineType=cv2.LINE_AA)
+            if pl.closed and len(pts) >= 2:
+                (x1, y1), (x2, y2) = pts[-1], pts[0]
+                cv2.line(preview, to_px(x1, y1), to_px(x2, y2), (0,), 2, lineType=cv2.LINE_AA)
+
+        # Interior / fallback lines
+        for line in elements.lines:
+            cv2.line(preview, to_px(line.x1, line.y1), to_px(line.x2, line.y2), (0,), 2, lineType=cv2.LINE_AA)
+
+        # Circles
+        for circle in elements.circles:
+            center = to_px(circle.x, circle.y)
+            radius = int(round(circle.radius / sf))
+            if radius > 0:
+                cv2.circle(preview, center, radius, (0,), 2, lineType=cv2.LINE_AA)
+
+        cv2.imwrite(str(vector_preview_path), preview)
+
         # Build response
         return ProcessResponse(
             success=True,
             id=file_id,
-            original_url=f"/api/files/{original_path.name}",
+            original_url=f"/api/files/{warped_path.name}",
+            warped_original_url=f"/api/files/{warped_path.name}",
             processed_url=f"/api/files/{processed_path.name}",
+            vector_preview_url=f"/api/files/{vector_preview_path.name}",
             dxf_url=f"/api/download/{file_id}",
             metadata={
                 "polylines_detected": len(elements.polylines),
-                "lines_detected": len(elements.lines),
+                "lines_detected": (
+                    sum(max(0, len(pl.points) - 1) + (1 if pl.closed and len(pl.points) >= 2 else 0) for pl in elements.polylines)
+                    + len(elements.lines)
+                ),
                 "circles_detected": len(elements.circles)
             }
         )

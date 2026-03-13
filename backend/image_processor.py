@@ -15,6 +15,7 @@ class ProcessingResult:
     success: bool
     processed_image: Optional[np.ndarray] = None
     original_image: Optional[np.ndarray] = None
+    warped_original_image: Optional[np.ndarray] = None
     contour: Optional[np.ndarray] = None
     error: Optional[str] = None
 
@@ -61,6 +62,7 @@ class ImageProcessor:
                     success=True,
                     processed_image=processed,
                     original_image=original,
+                    warped_original_image=None,
                     contour=None,
                 )
 
@@ -72,6 +74,7 @@ class ImageProcessor:
                     success=True,
                     processed_image=processed,
                     original_image=original,
+                    warped_original_image=None,
                     contour=contour,
                 )
 
@@ -82,6 +85,7 @@ class ImageProcessor:
                 success=True,
                 processed_image=processed,
                 original_image=original,
+                warped_original_image=warped,
                 contour=contour
             )
 

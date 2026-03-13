@@ -74,6 +74,7 @@ class CADElements:
     # DXF coordinate system has Y going "up", while image coordinates have Y going
     # "down". When provided, we flip Y as: y_dxf = canvas_height - y.
     canvas_height: Optional[float] = None
+    canvas_width: Optional[float] = None
 
 
 class CADConverter:
@@ -532,7 +533,14 @@ class CADConverter:
             lines = self._extract_lines_hough(working_image)
 
         canvas_height = float(working_image.shape[0]) * self.scale_factor
-        return CADElements(lines=lines, circles=circles, polylines=polylines, canvas_height=canvas_height)
+        canvas_width = float(working_image.shape[1]) * self.scale_factor
+        return CADElements(
+            lines=lines,
+            circles=circles,
+            polylines=polylines,
+            canvas_height=canvas_height,
+            canvas_width=canvas_width,
+        )
 
 
     def _merge_lines(self, lines: List[Line], threshold: float = 10.0) -> List[Line]:
