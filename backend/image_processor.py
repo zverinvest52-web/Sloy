@@ -125,14 +125,50 @@ class ImageProcessor:
         # Sort by area and get the largest
         contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
+        h, w = gray.shape[:2]
+
         for contour in contours[:5]:  # Check top 5 largest
             # Approximate contour
             peri = cv2.arcLength(contour, True)
             approx = cv2.approxPolyDP(contour, self.poly_epsilon * peri, True)
 
             # Check if it's a quadrilateral with sufficient area
-            if len(approx) == 4 and cv2.contourArea(approx) > self.min_contour_area:
-                return approx
+            if len(approx) != 4 or cv2.contourArea(approx) <= self.min_contour_area:
+                continue
+
+            # Heuristic: treat as "paper" only if it is a large, convex quad.
+            # This prevents warping on clean CAD screenshots where the largest quad
+            # might be the drawing's bounding box (which would create black borders).
+            if not cv2.isContourConvex(approx):
+                continue
+
+            quad_area = float(cv2.contourArea(approx))
+            area_ratio = quad_area / float(w * h)
+            if area_ratio < 0.65:
+                continue
+
+            # Require being near the image border (typical for a sheet/photo)
+            x, y, bw, bh = cv2.boundingRect(approx)
+            border_tol = int(0.03 * min(w, h))
+            touches_border = (
+                x <= border_tol
+                or y <= border_tol
+                or (x + bw) >= (w - 1 - border_tol)
+                or (y + bh) >= (h - 1 - border_tol)
+            )
+            if not touches_border:
+                continue
+
+
+            # Paper is typically bright. If the quad region is not mostly white,
+            # it's likely the drawing bbox or a UI frame -> skip warping.
+            mask = np.zeros((h, w), dtype=np.uint8)
+            cv2.drawContours(mask, [approx], -1, (255,), thickness=-1)
+            inside_mean = float(cv2.mean(gray, mask=mask)[0])
+            if inside_mean < 180.0:
+                continue
+
+            return approx
 
         return None
 
