@@ -226,43 +226,60 @@ class CADConverter:
         else:
             gray = image
 
-        # Close small gaps so contours become connected.
+        def extract_from(binary_0_255: np.ndarray) -> List[Polyline]:
+            contours, _ = cv2.findContours(binary_0_255, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return []
+
+            # Filter tiny contours relative to the largest one.
+            # On clean drawings we typically want only the main geometry contours.
+            max_area = 0.0
+            for cnt in contours:
+                a = float(cv2.contourArea(cnt))
+                if a > max_area:
+                    max_area = a
+            dynamic_min_area = max(self.min_contour_area, self.keep_area_ratio_of_max * max_area)
+
+            polylines: List[Polyline] = []
+            for cnt in contours:
+                area = float(cv2.contourArea(cnt))
+                if area < dynamic_min_area:
+                    continue
+
+                peri = cv2.arcLength(cnt, True)
+                eps = self.approx_epsilon_ratio * peri
+                approx = cv2.approxPolyDP(cnt, eps, True)
+
+                pts = approx.reshape(-1, 2)
+                points = _dedupe_consecutive(_scale_points(pts, self.scale_factor))
+                if len(points) < 2:
+                    continue
+
+                # Contours returned by findContours are closed by definition.
+                polylines.append(Polyline(points=points, closed=True, layer="POLYLINES"))
+
+            return polylines
+
+        # Pass A: no morphology (preserves concavities like "Г" shapes)
+        _, bin_raw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY)
+        polylines_raw = extract_from(bin_raw)
+
+        # Pass B: morphology close (connects small gaps but can over-smooth concave corners)
         k = np.ones((self.close_kernel_size, self.close_kernel_size), np.uint8)
         closed = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, k, iterations=self.close_iterations)
+        _, bin_closed = cv2.threshold(closed, 0, 255, cv2.THRESH_BINARY)
+        polylines_closed = extract_from(bin_closed)
 
-        # Ensure binary 0/255
-        _, bin_img = cv2.threshold(closed, 0, 255, cv2.THRESH_BINARY)
+        if not polylines_raw:
+            return polylines_closed
+        if not polylines_closed:
+            return polylines_raw
 
-        contours, _ = cv2.findContours(bin_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Prefer the extraction that preserves more vertices (helps avoid turning "Г" into triangles).
+        raw_vertices = sum(len(pl.points) for pl in polylines_raw)
+        closed_vertices = sum(len(pl.points) for pl in polylines_closed)
+        return polylines_raw if raw_vertices >= closed_vertices else polylines_closed
 
-        # Filter tiny contours relative to the largest one.
-        # On clean drawings we typically want only the main geometry contours.
-        max_area = 0.0
-        for cnt in contours:
-            a = float(cv2.contourArea(cnt))
-            if a > max_area:
-                max_area = a
-        dynamic_min_area = max(self.min_contour_area, self.keep_area_ratio_of_max * max_area)
-
-        polylines: List[Polyline] = []
-        for cnt in contours:
-            area = float(cv2.contourArea(cnt))
-            if area < dynamic_min_area:
-                continue
-
-            peri = cv2.arcLength(cnt, True)
-            eps = self.approx_epsilon_ratio * peri
-            approx = cv2.approxPolyDP(cnt, eps, True)
-
-            pts = approx.reshape(-1, 2)
-            points = _dedupe_consecutive(_scale_points(pts, self.scale_factor))
-            if len(points) < 2:
-                continue
-
-            # Contours returned by findContours are closed by definition.
-            polylines.append(Polyline(points=points, closed=True, layer="POLYLINES"))
-
-        return polylines
 
 
     def _polylines_to_lines(self, polylines: List[Polyline]) -> List[Line]:
@@ -496,15 +513,6 @@ class CADConverter:
         # 1) External closed geometry as polylines
         polylines = self._extract_polylines(working_image)
 
-        # Heuristic: screenshots with multiple separate contours often benefit from
-        # stronger polygon simplification to avoid too many tiny segments.
-        if len(polylines) >= 3 and self.approx_epsilon_ratio < 0.10:
-            old_eps = self.approx_epsilon_ratio
-            self.approx_epsilon_ratio = 0.10
-            try:
-                polylines = self._extract_polylines(working_image)
-            finally:
-                self.approx_epsilon_ratio = old_eps
 
         # 2) Build residual image by erasing extracted polylines
         residual = working_image
