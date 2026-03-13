@@ -71,6 +71,9 @@ class CADElements:
     circles: List[Circle] = field(default_factory=list)
     polylines: List[Polyline] = field(default_factory=list)
     rectangles: List[Rectangle] = field(default_factory=list)
+    # DXF coordinate system has Y going "up", while image coordinates have Y going
+    # "down". When provided, we flip Y as: y_dxf = canvas_height - y.
+    canvas_height: Optional[float] = None
 
 
 class CADConverter:
@@ -100,6 +103,108 @@ class CADConverter:
     # detected outer geometry bbox.
     interior_line_min_length_ratio: float = 0.60
     border_touch_margin_px: int = 2
+
+    # Snap nearly-horizontal/vertical lines to perfect axis alignment.
+    snap_angle_degrees: float = 3.0
+
+    def _line_angle_rad(self, line: Line) -> float:
+        return float(np.arctan2(line.y2 - line.y1, line.x2 - line.x1))
+
+    def _snap_and_extend_interior_line(self, line: Line, polylines: List[Polyline]) -> Line:
+        """Snap near-axis interior line and extend it until it touches outer geometry."""
+        if not polylines:
+            return line
+
+        pts = [p for pl in polylines for p in pl.points]
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        min_x, max_x = float(min(xs)), float(max(xs))
+        min_y, max_y = float(min(ys)), float(max(ys))
+
+        # Direction and angle normalization
+        ang = self._line_angle_rad(line)
+        # Map angle to [0, pi)
+        ang = float((ang + np.pi) % np.pi)
+        tol = float(np.deg2rad(self.snap_angle_degrees))
+
+        # Snap to horizontal
+        if min(ang, abs(np.pi - ang)) <= tol:
+            y = float((line.y1 + line.y2) / 2.0)
+            return Line(x1=min_x, y1=y, x2=max_x, y2=y)
+
+        # Snap to vertical
+        if abs((np.pi / 2.0) - ang) <= tol:
+            x = float((line.x1 + line.x2) / 2.0)
+            return Line(x1=x, y1=min_y, x2=x, y2=max_y)
+
+        # Otherwise: extend along its direction until it intersects the outer polyline.
+        # We compute intersections of the infinite line with all outer polyline segments.
+        p0 = np.array([line.x1, line.y1], dtype=np.float64)
+        d = np.array([line.x2 - line.x1, line.y2 - line.y1], dtype=np.float64)
+        norm = float(np.hypot(d[0], d[1]))
+        if norm < 1e-9:
+            return line
+        d /= norm
+
+        def intersect_infinite_with_segment(a: np.ndarray, b: np.ndarray) -> Optional[np.ndarray]:
+            """Return intersection point if infinite line p0+t*d crosses segment a->b."""
+            v = b - a
+            denom = d[0] * v[1] - d[1] * v[0]
+            if abs(float(denom)) < 1e-12:
+                return None
+            w = a - p0
+            t = (w[0] * v[1] - w[1] * v[0]) / denom
+            u = (w[0] * d[1] - w[1] * d[0]) / denom
+            if float(u) < -1e-6 or float(u) > 1.0 + 1e-6:
+                return None
+            return p0 + t * d
+
+        intersections: List[np.ndarray] = []
+        for pl in polylines:
+            p = pl.points
+            for i in range(len(p) - 1):
+                a = np.array(p[i], dtype=np.float64)
+                b = np.array(p[i + 1], dtype=np.float64)
+                ip = intersect_infinite_with_segment(a, b)
+                if ip is not None:
+                    intersections.append(ip)
+            if pl.closed and len(p) >= 2:
+                a = np.array(p[-1], dtype=np.float64)
+                b = np.array(p[0], dtype=np.float64)
+                ip = intersect_infinite_with_segment(a, b)
+                if ip is not None:
+                    intersections.append(ip)
+
+        # Fallback: intersect with bbox if polygon intersections failed
+        if len(intersections) < 2:
+            # Intersect with rectangle bbox
+            rect = [
+                (np.array([min_x, min_y], dtype=np.float64), np.array([max_x, min_y], dtype=np.float64)),
+                (np.array([max_x, min_y], dtype=np.float64), np.array([max_x, max_y], dtype=np.float64)),
+                (np.array([max_x, max_y], dtype=np.float64), np.array([min_x, max_y], dtype=np.float64)),
+                (np.array([min_x, max_y], dtype=np.float64), np.array([min_x, min_y], dtype=np.float64)),
+            ]
+            for a, b in rect:
+                ip = intersect_infinite_with_segment(a, b)
+                if ip is not None:
+                    intersections.append(ip)
+
+        if len(intersections) >= 2:
+            # Pick farthest pair
+            best_i, best_j = 0, 1
+            best_dist = -1.0
+            for i in range(len(intersections)):
+                for j in range(i + 1, len(intersections)):
+                    dist = float(np.hypot(intersections[i][0] - intersections[j][0], intersections[i][1] - intersections[j][1]))
+                    if dist > best_dist:
+                        best_dist = dist
+                        best_i, best_j = i, j
+            a = intersections[best_i]
+            b = intersections[best_j]
+            return Line(x1=float(a[0]), y1=float(a[1]), x2=float(b[0]), y2=float(b[1]))
+
+        return line
+
 
     def _extract_polylines(self, image: np.ndarray) -> List[Polyline]:
         """Extract (mostly closed) polylines from a binary image.
@@ -418,7 +523,7 @@ class CADConverter:
                 ys = [p[1] for p in pts]
                 bbox_diag = float(np.hypot(max(xs) - min(xs), max(ys) - min(ys)))
                 if bbox_diag > 1e-6 and seg_len(longest) / bbox_diag >= self.interior_line_min_length_ratio:
-                    lines = [longest]
+                    lines = [self._snap_and_extend_interior_line(longest, polylines)]
             else:
                 lines = [longest]
 
@@ -426,7 +531,8 @@ class CADConverter:
         if not polylines and not lines:
             lines = self._extract_lines_hough(working_image)
 
-        return CADElements(lines=lines, circles=circles, polylines=polylines)
+        canvas_height = float(working_image.shape[0]) * self.scale_factor
+        return CADElements(lines=lines, circles=circles, polylines=polylines, canvas_height=canvas_height)
 
 
     def _merge_lines(self, lines: List[Line], threshold: float = 10.0) -> List[Line]:
@@ -529,28 +635,33 @@ class CADConverter:
             doc.layers.add('LINES', color=7)
             doc.layers.add('CIRCLES', color=3)
 
+            def fy(y: float) -> float:
+                if elements.canvas_height is None:
+                    return y
+                return float(elements.canvas_height - y)
+
             # Export polylines as individual LINE entities (AutoCAD-friendly counts)
             for pl in elements.polylines:
                 pts = pl.points
                 for i in range(len(pts) - 1):
                     (x1, y1), (x2, y2) = pts[i], pts[i + 1]
-                    msp.add_line((x1, y1), (x2, y2), dxfattribs={'layer': 'LINES'})
+                    msp.add_line((x1, fy(y1)), (x2, fy(y2)), dxfattribs={'layer': 'LINES'})
                 if pl.closed and len(pts) >= 2:
                     (x1, y1), (x2, y2) = pts[-1], pts[0]
-                    msp.add_line((x1, y1), (x2, y2), dxfattribs={'layer': 'LINES'})
+                    msp.add_line((x1, fy(y1)), (x2, fy(y2)), dxfattribs={'layer': 'LINES'})
 
             # Interior / fallback lines
             for line in elements.lines:
                 msp.add_line(
-                    (line.x1, line.y1),
-                    (line.x2, line.y2),
+                    (line.x1, fy(line.y1)),
+                    (line.x2, fy(line.y2)),
                     dxfattribs={'layer': 'LINES'}
                 )
 
             # Circles
             for circle in elements.circles:
                 msp.add_circle(
-                    (circle.x, circle.y),
+                    (circle.x, fy(circle.y)),
                     circle.radius,
                     dxfattribs={'layer': 'CIRCLES'}
                 )
