@@ -69,3 +69,8 @@ backend/downloaded_*.dxf
 backend/uploads/
 backend/processed/
 backend/dxf/
+
+# Runtime directories at repo root (when backend runs from repo root)
+uploads/
+processed/
+dxf/

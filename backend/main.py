@@ -30,11 +30,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # CORS middleware
+import os
+
+# CORS middleware
+_cors_allow_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
     # In the browser, CORS failures often surface as a generic "network error".
     # Allow any localhost/127.0.0.1 dev port.
     allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
+    # Additional explicit origins, e.g. GitHub Pages: https://<user>.github.io
+    allow_origins=_cors_allow_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
