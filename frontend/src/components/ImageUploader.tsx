@@ -180,8 +180,8 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
               <div className="flex flex-col h-full min-h-[420px] gap-5">
                 {/* Photos list: fills all space between top padding and bottom button */}
                 <div className="w-full flex-1 rounded-2xl overflow-hidden">
-                  <div className="h-full w-full overflow-hidden flex flex-col gap-4">
-                    {images.slice(0, 3).map((img) => {
+                  <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    {images.map((img) => {
                       const isActive = img.id === activeId;
                       return (
                         <div
