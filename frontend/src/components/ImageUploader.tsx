@@ -62,9 +62,24 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
       return merged;
     });
 
-    // No thumbnails in the UI: auto-select first uploaded image.
-    setActiveId((prevActive) => prevActive ?? next[0]?.id ?? null);
+    // Do not auto-select: user chooses explicitly.
+    setActiveId((prevActive) => prevActive);
   }, [onUploadError]);
+
+  const removeImage = useCallback((id: string) => {
+    setImages((prev) => {
+      const img = prev.find((x) => x.id === id);
+      if (img) URL.revokeObjectURL(img.previewUrl);
+      const next = prev.filter((x) => x.id !== id);
+
+      // Adjust active selection
+      if (activeId === id) {
+        setActiveId(next[0]?.id ?? null);
+      }
+
+      return next;
+    });
+  }, [activeId]);
 
   const handleBrowse = useCallback(() => {
     fileInputRef.current?.click();
@@ -169,21 +184,35 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
                     {images.map((img) => {
                       const isActive = img.id === activeId;
                       return (
-                        <button
-                          key={img.id}
-                          type="button"
-                          onClick={() => setActiveId(img.id)}
-                          className={`h-24 w-full rounded-2xl overflow-hidden border transition ${
-                            isActive
-                              ? 'border-black/60 ring-2 ring-black/10'
-                              : 'border-black/10 hover:border-black/20'
-                          }`}
-                          aria-label="Выбрать изображение"
-                        >
-                          <img src={img.previewUrl} alt="" className="h-full w-full object-cover" />
-                        </button>
+                        <div key={img.id} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setActiveId(img.id)}
+                            className={`h-24 w-full rounded-2xl overflow-hidden border transition ${
+                              isActive
+                                ? 'border-black/60 ring-2 ring-black/10'
+                                : 'border-black/10 hover:border-black/20'
+                            }`}
+                            aria-label="Выбрать изображение"
+                          >
+                            <img src={img.previewUrl} alt="" className="h-full w-full object-cover" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => removeImage(img.id)}
+                            className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-white shadow border border-black/10 text-[#111111] hover:bg-[#F8F8F8]"
+                            aria-label="Удалить изображение"
+                            disabled={isUploading}
+                          >
+                            ×
+                          </button>
+                        </div>
                       );
                     })}
+
+                    {/* Keep scroll height stable when empty */}
+                    {images.length === 0 ? <div className="h-24 w-full rounded-2xl bg-transparent" /> : null}
                   </div>
                 </div>
 
