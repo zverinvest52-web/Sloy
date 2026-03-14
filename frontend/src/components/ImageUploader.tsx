@@ -165,7 +165,7 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 md:gap-8 justify-items-center md:justify-items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 md:gap-8 justify-items-center md:justify-items-stretch items-stretch">
         <input
             ref={fileInputRef}
             type="file"
@@ -178,8 +178,8 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
 
           {/* Left card */}
           <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="p-7">
-              <div className="flex flex-col min-h-[420px]">
+            <div className="p-7 h-full">
+              <div className="flex flex-col h-full min-h-[420px]">
             {/* Thumbs scroll */}
             <div className="w-24 h-[320px] rounded-2xl overflow-hidden mb-5">
               <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -222,7 +222,7 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
                 type="button"
                 onClick={handleBrowse}
                 disabled={isUploading}
-                className="w-full px-5 py-3 rounded-2xl bg-[#EDEDED] hover:bg-[#E6E6E6] text-[#111111] font-semibold transition disabled:opacity-60 text-left border border-black/10"
+                className="w-full px-6 py-2.5 rounded-2xl bg-[#919191] hover:bg-[#858585] text-white font-semibold transition disabled:opacity-60 text-center"
               >
                 Обзор
               </button>
