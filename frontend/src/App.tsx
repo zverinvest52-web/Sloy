@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import ImageUploader from './components/ImageUploader';
-import ResultsPage from './components/ResultsPage';
 import { ProcessResponse } from './types';
 import './App.css';
 
@@ -33,21 +32,21 @@ function App() {
 
   return (
     <div className="min-h-screen bg-white">
-      {!result ? (
-        <div className="mx-auto w-[1047px] overflow-hidden pt-[99px] pb-16">
-          {error && (
-            <div className="mb-6 rounded-2xl border border-[#C54545]/20 bg-[#C54545]/10 px-4 py-3 text-[#C54545]">
-              {error}
-            </div>
-          )}
+      <div className="mx-auto w-[1047px] overflow-hidden pt-[99px] pb-16">
+        {error && (
+          <div className="mb-6 rounded-2xl border border-[#C54545]/20 bg-[#C54545]/10 px-4 py-3 text-[#C54545]">
+            {error}
+          </div>
+        )}
 
-          <ImageUploader onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} />
-        </div>
-      ) : (
-        <div className="mx-auto w-[1056px] overflow-hidden pt-[67px] pb-16">
-          <ResultsPage result={result} onDownload={handleDownload} onReset={handleReset} />
-        </div>
-      )}
+        <ImageUploader
+          onUploadSuccess={handleUploadSuccess}
+          onUploadError={handleUploadError}
+          result={result}
+          onDownload={handleDownload}
+          onReset={handleReset}
+        />
+      </div>
     </div>
   );
 }

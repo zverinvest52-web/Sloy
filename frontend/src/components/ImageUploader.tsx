@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ProcessResponse } from '../types';
-import { validateImageFile, validateProcessResponse } from '../utils/validation';
+import CustomSlider from './CustomSlider';
+import { sanitizeUrl, validateImageFile, validateProcessResponse } from '../utils/validation';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 interface ImageUploaderProps {
   onUploadSuccess: (result: ProcessResponse) => void;
   onUploadError: (error: string) => void;
+
+  result: ProcessResponse | null;
+  onDownload: () => void;
+  onReset: () => void;
 }
 
 type SelectedImage = {
@@ -15,7 +20,13 @@ type SelectedImage = {
   previewUrl: string;
 };
 
-export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageUploaderProps) {
+export default function ImageUploader({
+  onUploadSuccess,
+  onUploadError,
+  result,
+  onDownload,
+  onReset,
+}: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -234,41 +245,76 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
       </div>
 
           {/* Right card */}
-          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="p-5 md:p-6">
-              <div className="rounded-3xl bg-[#EEEEEE] overflow-hidden">
-                <div className="aspect-[16/10] w-full bg-[#EEEEEE]">
-                  {activeImage ? (
-                    <img
-                      src={activeImage.previewUrl}
-                      alt="Предпросмотр"
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center px-6 text-center">
-                      <div>
-                        <div className="text-[#111111] font-semibold text-lg mb-1">Добавьте фото чертежа</div>
-                        <div className="text-[#909090] text-sm">Перетащите сюда или выберите через «Обзор»</div>
+          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden h-[420px]">
+            <div className="p-6 h-full">
+              <div className="flex flex-col h-full">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Было</div>
+                  <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Стало</div>
+                </div>
+
+                <div className="rounded-3xl bg-[#EEEEEE] overflow-hidden flex-1 min-h-0">
+                  <div className="h-full w-full bg-[#EEEEEE]">
+                    {result?.warped_original_url || result?.original_url || result?.vector_preview_url || result?.processed_url ? (
+                      <CustomSlider
+                        bottomImage={sanitizeUrl(result.vector_preview_url || result.processed_url || '', API_URL) || ''}
+                        topImage={sanitizeUrl(result.warped_original_url || result.original_url || '', API_URL) || ''}
+                      />
+                    ) : activeImage ? (
+                      <img
+                        src={activeImage.previewUrl}
+                        alt="Предпросмотр"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center px-6 text-center">
+                        <div>
+                          <div className="text-[#111111] font-semibold text-lg mb-1">Добавьте фото чертежа</div>
+                          <div className="text-[#909090] text-sm">Перетащите сюда или выберите через «Обзор»</div>
+                        </div>
                       </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="text-xs text-[#909090]">
+                    {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
+                  </div>
+
+                  {result ? (
+                    <div className="inline-flex">
+                      <button
+                        type="button"
+                        onClick={onDownload}
+                        disabled={!result.dxf_url}
+                        aria-disabled={!result.dxf_url}
+                        className="px-6 py-2.5 font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860] bg-[#6B9860] hover:bg-[#5F8756] text-white border border-[#6B9860] rounded-l-2xl rounded-r-[10px]"
+                      >
+                        Экспорт DXF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onReset}
+                        className="px-6 py-2.5 font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] -ml-px rounded-r-2xl rounded-l-[10px]"
+                        aria-label="Загрузить заново"
+                        title="Заново"
+                      >
+                        Заново
+                      </button>
                     </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleProcess}
+                      disabled={!activeImage || isUploading}
+                      aria-disabled={!activeImage || isUploading}
+                      className="px-6 py-2.5 rounded-2xl bg-[#6B9860] hover:bg-[#5F8756] text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860]"
+                    >
+                      {isUploading ? 'Обработка…' : 'Обработать'}
+                    </button>
                   )}
                 </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-xs text-[#909090]">
-                  {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleProcess}
-                  disabled={!activeImage || isUploading}
-                  aria-disabled={!activeImage || isUploading}
-                  className="px-6 py-2.5 rounded-2xl bg-[#6B9860] hover:bg-[#5F8756] text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860]"
-                >
-                  {isUploading ? 'Обработка…' : 'Обработать'}
-                </button>
               </div>
             </div>
           </div>
