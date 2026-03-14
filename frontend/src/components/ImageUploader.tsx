@@ -177,9 +177,9 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
           {/* Left card */}
           <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
             <div className="p-7 h-full">
-              <div className="flex flex-col h-full min-h-[420px]">
-                {/* Photos list (no thumbnails). Height fits 3 photos. */}
-                <div className="w-full h-[320px] rounded-2xl overflow-hidden mb-5">
+              <div className="flex flex-col h-full min-h-[420px] gap-5">
+                {/* Photos list: fills all space between top padding and bottom button */}
+                <div className="w-full flex-1 rounded-2xl overflow-hidden">
                   <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {images.map((img) => {
                       const isActive = img.id === activeId;
@@ -201,7 +201,7 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
                           <button
                             type="button"
                             onClick={() => removeImage(img.id)}
-                            className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-white shadow border border-black/10 text-[#111111] hover:bg-[#F8F8F8]"
+                            className="absolute top-2 right-2 h-7 w-7 rounded-full bg-white shadow border border-black/10 text-[#111111] hover:bg-[#F8F8F8]"
                             aria-label="Удалить изображение"
                             disabled={isUploading}
                           >
