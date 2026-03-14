@@ -179,15 +179,11 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
           {/* Left card */}
           <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
             <div className="p-7">
-              <div className="text-sm font-semibold text-[#111111] mb-4">Загрузка</div>
-
-              <div className="flex flex-col h-[320px]">
+              <div className="flex flex-col min-h-[420px]">
             {/* Thumbs scroll */}
             <div className="w-24 h-[320px] rounded-2xl overflow-hidden mb-5">
               <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                {images.length === 0 ? (
-                  <div className="h-24 w-24 rounded-2xl bg-[#F8F8F8]" />
-                ) : (
+                {images.length === 0 ? null : (
                   images.map((img) => {
                     const isActive = img.id === activeId;
                     return (
@@ -226,7 +222,7 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
                 type="button"
                 onClick={handleBrowse}
                 disabled={isUploading}
-                className="w-full px-4 py-3 rounded-2xl bg-white/70 hover:bg-white text-[#111111] font-semibold transition disabled:opacity-60 text-left"
+                className="w-full px-5 py-3 rounded-2xl bg-[#EDEDED] hover:bg-[#E6E6E6] text-[#111111] font-semibold transition disabled:opacity-60 text-left border border-black/10"
               >
                 Обзор
               </button>
