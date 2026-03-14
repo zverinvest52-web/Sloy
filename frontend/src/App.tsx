@@ -34,7 +34,7 @@ function App() {
   return (
     <div className="min-h-screen bg-white">
       {!result ? (
-        <div className="mx-auto w-full max-w-[995px] px-4 pt-[99px] pb-16">
+        <div className="mx-auto w-full max-w-[1047px] px-0 pt-[99px] pb-16">
           {error && (
             <div className="mb-6 rounded-2xl border border-[#C54545]/20 bg-[#C54545]/10 px-4 py-3 text-[#C54545]">
               {error}

@@ -165,10 +165,8 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Outer light-gray shared panel (as in mock) */}
-      <div className="rounded-3xl bg-[#EEEEEE] p-6 md:p-7">
-        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 md:gap-8">
-          <input
+      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 md:gap-8 justify-items-center md:justify-items-stretch">
+        <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
@@ -186,7 +184,7 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
               <div className="flex md:flex-col gap-4 md:gap-5 items-start">
             {/* Thumbs scroll */}
             <div className="w-20 md:w-24 h-[264px] md:h-[320px] rounded-2xl overflow-hidden">
-              <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-3 md:gap-4">
+              <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-3 md:gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {images.length === 0 ? (
                   <div className="h-20 w-20 md:h-24 md:w-24 rounded-2xl bg-[#F8F8F8]" />
                 ) : (
@@ -279,7 +277,6 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
               </div>
             </div>
           </div>
-        </div>
       </div>
     </div>
   );
