@@ -13,16 +13,18 @@ interface ResultsPageProps {
 export default function ResultsPage({ result, onDownload, onReset }: ResultsPageProps) {
   const isProcessingComplete = result.processing_complete !== false;
 
-  const bottomImageUrl = sanitizeUrl(result.vector_preview_url || result.processed_url || '', API_URL);
-  const topImageUrl = sanitizeUrl(result.warped_original_url || result.original_url || '', API_URL);
+  // Было (слева): исходное фото или выпрямленное, если была коррекция перспективы
+  const beforeImageUrl = sanitizeUrl(result.warped_original_url || result.original_url || '', API_URL);
+  // Стало (справа): векторный предпросмотр (или processed как fallback)
+  const afterImageUrl = sanitizeUrl(result.vector_preview_url || result.processed_url || '', API_URL);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="px-6 py-5 md:px-8 md:py-7 border-b border-slate-200">
+    <div className="rounded-3xl border border-[#F0F0F0] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
+      <div className="px-6 py-5 md:px-8 md:py-7 border-b border-[#F0F0F0]">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <h2 className="text-xl md:text-2xl font-bold text-slate-900">Результат</h2>
-            <p className="text-sm text-slate-500">Сравнение оригинала и готового результата</p>
+            <h2 className="text-xl md:text-2xl font-bold text-[#111111]">Результат</h2>
+            <p className="text-sm text-[#909090]">Было / стало</p>
           </div>
 
           {result.metadata && (
@@ -40,12 +42,12 @@ export default function ResultsPage({ result, onDownload, onReset }: ResultsPage
 
       <div className="p-6 md:p-8">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Оригинал</div>
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Готовое</div>
+          <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Было</div>
+          <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Стало</div>
         </div>
 
-        {bottomImageUrl && topImageUrl ? (
-          <CustomSlider bottomImage={bottomImageUrl} topImage={topImageUrl} />
+        {beforeImageUrl && afterImageUrl ? (
+          <CustomSlider bottomImage={afterImageUrl} topImage={beforeImageUrl} />
         ) : (
           <div className="w-full aspect-video rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center">
             <p className="text-slate-500 text-sm">Изображения недоступны</p>
@@ -53,33 +55,33 @@ export default function ResultsPage({ result, onDownload, onReset }: ResultsPage
         )}
 
         <div className="mt-5 flex items-center justify-between gap-3">
-          <div className="text-xs text-slate-500" aria-live="polite">
+          <div className="text-xs text-[#909090]" aria-live="polite">
             {isProcessingComplete ? 'Готово к экспорту DXF' : 'Обработка…'}
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onDownload}
-              disabled={!isProcessingComplete || !result.dxf_url}
-              aria-disabled={!isProcessingComplete || !result.dxf_url}
-              className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-slate-900"
-            >
-              Экспорт DXF
-            </button>
+          <div className="flex items-center">
+            {/* segmented control: Экспорт / Заново */}
+            <div className="inline-flex">
+              <button
+                type="button"
+                onClick={onDownload}
+                disabled={!isProcessingComplete || !result.dxf_url}
+                aria-disabled={!isProcessingComplete || !result.dxf_url}
+                className="px-6 py-2.5 font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860] bg-[#6B9860] hover:bg-[#5F8756] text-white border border-[#6B9860] rounded-l-2xl rounded-r-[10px]"
+              >
+                Экспорт DXF
+              </button>
 
-            <button
-              type="button"
-              onClick={onReset}
-              className="h-10 w-10 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition"
-              aria-label="Сбросить и загрузить заново"
-              title="Сбросить"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 mx-auto" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1 0 3-6.7" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4v4h4" />
-              </svg>
-            </button>
+              <button
+                type="button"
+                onClick={onReset}
+                className="px-6 py-2.5 font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] -ml-px rounded-r-2xl rounded-l-[10px]"
+                aria-label="Загрузить заново"
+                title="Заново"
+              >
+                Заново
+              </button>
+            </div>
           </div>
         </div>
       </div>

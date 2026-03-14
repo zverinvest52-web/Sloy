@@ -101,6 +101,17 @@ frontend/*.bat
 /test_export*.dxf
 /test_output.dxf
 
+# Local UI mock screenshots / ad-hoc crops
+/_tmp_*.png
+/скролл*.png
+/готовое.png
+/главный экран.png
+/главый экран без изображений.png
+/основной экран.png
+/пусто.png
+/_tmp_*.png
+/\*_tmp_*.png
+
 # Local backend scripts/tests (keep only real source files in repo)
 backend/processor.py
 backend/test_*.py

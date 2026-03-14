@@ -32,7 +32,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 px-4 py-8 md:py-12">
+    <div className="min-h-screen bg-[#F8F8F8] px-4 py-8 md:py-12">
       {!result ? (
         <div className="max-w-6xl mx-auto">
           <header className="mb-6 md:mb-10">
