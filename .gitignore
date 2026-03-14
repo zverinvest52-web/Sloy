@@ -100,3 +100,8 @@ frontend/*.bat
 /test_direct_export.dxf
 /test_export*.dxf
 /test_output.dxf
+
+# Local backend scripts/tests (keep only real source files in repo)
+backend/processor.py
+backend/test_*.py
+backend/verify_*.py
