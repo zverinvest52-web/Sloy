@@ -178,15 +178,15 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
 
           {/* Left card */}
           <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="p-5 md:p-6">
+            <div className="p-7">
               <div className="text-sm font-semibold text-[#111111] mb-4">Загрузка</div>
 
-              <div className="flex md:flex-col gap-4 md:gap-5 items-start">
+              <div className="flex gap-5 items-start">
             {/* Thumbs scroll */}
-            <div className="w-20 md:w-24 h-[264px] md:h-[320px] rounded-2xl overflow-hidden">
-              <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-3 md:gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="w-24 h-[320px] rounded-2xl overflow-hidden">
+              <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {images.length === 0 ? (
-                  <div className="h-20 w-20 md:h-24 md:w-24 rounded-2xl bg-[#F8F8F8]" />
+                  <div className="h-24 w-24 rounded-2xl bg-[#F8F8F8]" />
                 ) : (
                   images.map((img) => {
                     const isActive = img.id === activeId;
@@ -195,7 +195,7 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
                         <button
                           type="button"
                           onClick={() => setActiveId(img.id)}
-                          className={`h-20 w-20 md:h-24 md:w-24 rounded-2xl overflow-hidden border transition ${
+                          className={`h-24 w-24 rounded-2xl overflow-hidden border transition ${
                             isActive
                               ? 'border-black/60 ring-2 ring-black/10'
                               : 'border-black/10 hover:border-black/20'
