@@ -34,7 +34,7 @@ function App() {
   return (
     <div className="min-h-screen bg-white">
       {!result ? (
-        <div className="mx-auto w-full max-w-[1047px] px-0 pt-[99px] pb-16">
+        <div className="mx-auto w-[1047px] overflow-hidden pt-[99px] pb-16">
           {error && (
             <div className="mb-6 rounded-2xl border border-[#C54545]/20 bg-[#C54545]/10 px-4 py-3 text-[#C54545]">
               {error}
@@ -44,7 +44,7 @@ function App() {
           <ImageUploader onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-[1056px] px-4 pt-[67px] pb-16">
+        <div className="mx-auto w-[1056px] overflow-hidden pt-[67px] pb-16">
           <ResultsPage result={result} onDownload={handleDownload} onReset={handleReset} />
         </div>
       )}

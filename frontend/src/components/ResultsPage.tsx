@@ -20,7 +20,7 @@ export default function ResultsPage({ result, onDownload, onReset }: ResultsPage
 
   return (
     <div className="rounded-3xl bg-[#F5F5F5] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-      <div className="p-6 md:p-8">
+      <div className="p-8">
         <div className="flex items-center justify-between mb-3">
           <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Было</div>
           <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Стало</div>

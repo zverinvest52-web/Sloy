@@ -163,7 +163,7 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 md:gap-8 justify-items-center md:justify-items-stretch items-stretch">
+      <div className="grid grid-cols-[260px_1fr] gap-8 justify-items-stretch items-start">
         <input
             ref={fileInputRef}
             type="file"
@@ -176,11 +176,11 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
 
           {/* Left card */}
           <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="p-7 h-full">
-              <div className="flex flex-col h-full min-h-[420px] gap-5">
+            <div className="p-7">
+              <div className="flex flex-col h-[420px] gap-5">
                 {/* Photos list: fills all space between top padding and bottom button */}
-                <div className="w-full flex-1 rounded-2xl overflow-hidden">
-                  <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <div className="w-full flex-1 min-h-0 rounded-2xl overflow-hidden">
+                  <div className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {images.map((img) => {
                       const isActive = img.id === activeId;
                       return (
