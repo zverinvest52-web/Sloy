@@ -62,26 +62,9 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
       return merged;
     });
 
-    // Важно: при импорте НЕ показываем сразу чертёж в большом превью.
-    // Пользователь сначала сам выбирает миниатюру — так ничего не "мельтешит".
-    // Поэтому activeId здесь не выставляем автоматически.
-    setActiveId((prevActive) => prevActive);
+    // No thumbnails in the UI: auto-select first uploaded image.
+    setActiveId((prevActive) => prevActive ?? next[0]?.id ?? null);
   }, [onUploadError]);
-
-  const removeImage = useCallback((id: string) => {
-    setImages((prev) => {
-      const img = prev.find((x) => x.id === id);
-      if (img) URL.revokeObjectURL(img.previewUrl);
-      const next = prev.filter((x) => x.id !== id);
-
-      // Adjust active selection
-      if (activeId === id) {
-        setActiveId(next[0]?.id ?? null);
-      }
-
-      return next;
-    });
-  }, [activeId]);
 
   const handleBrowse = useCallback(() => {
     fileInputRef.current?.click();
@@ -180,18 +163,17 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
           <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
             <div className="p-7 h-full">
               <div className="flex flex-col h-full min-h-[420px]">
-            {/* Thumbs scroll */}
-            <div className="w-24 h-[320px] rounded-2xl overflow-hidden mb-5">
-              <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                {images.length === 0 ? null : (
-                  images.map((img) => {
-                    const isActive = img.id === activeId;
-                    return (
-                      <div key={img.id} className="relative">
+                {/* Photos list (no thumbnails). Height fits 3 photos. */}
+                <div className="w-full h-[320px] rounded-2xl overflow-hidden mb-5">
+                  <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    {images.map((img) => {
+                      const isActive = img.id === activeId;
+                      return (
                         <button
+                          key={img.id}
                           type="button"
                           onClick={() => setActiveId(img.id)}
-                          className={`h-24 w-24 rounded-2xl overflow-hidden border transition ${
+                          className={`h-24 w-full rounded-2xl overflow-hidden border transition ${
                             isActive
                               ? 'border-black/60 ring-2 ring-black/10'
                               : 'border-black/10 hover:border-black/20'
@@ -200,34 +182,22 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
                         >
                           <img src={img.previewUrl} alt="" className="h-full w-full object-cover" />
                         </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                        <button
-                          type="button"
-                          onClick={() => removeImage(img.id)}
-                          className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-white shadow border border-black/10 text-[#111111] hover:bg-[#F8F8F8]"
-                          aria-label="Удалить изображение"
-                          disabled={isUploading}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
+                <div className="mt-auto">
+                  <button
+                    type="button"
+                    onClick={handleBrowse}
+                    disabled={isUploading}
+                    className="w-full px-6 py-2.5 rounded-2xl bg-[#919191] hover:bg-[#858585] text-white font-semibold transition disabled:opacity-60 text-center"
+                  >
+                    Обзор
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div className="mt-auto">
-              <button
-                type="button"
-                onClick={handleBrowse}
-                disabled={isUploading}
-                className="w-full px-6 py-2.5 rounded-2xl bg-[#919191] hover:bg-[#858585] text-white font-semibold transition disabled:opacity-60 text-center"
-              >
-                Обзор
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
