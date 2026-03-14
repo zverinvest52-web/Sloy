@@ -245,10 +245,10 @@ export default function ImageUploader({
       </div>
 
           {/* Right card */}
-          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden h-[420px]">
-            <div className="p-6 h-full">
-              <div className="flex flex-col h-full">
-                <div className="flex items-center justify-between mb-3">
+          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
+            <div className="p-7">
+              <div className="flex flex-col h-[420px] gap-5">
+                <div className="flex items-center justify-between">
                   <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Было</div>
                   <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Стало</div>
                 </div>
@@ -277,7 +277,7 @@ export default function ImageUploader({
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="mt-auto flex items-center justify-between gap-3">
                   <div className="text-xs text-[#909090]">
                     {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
                   </div>
