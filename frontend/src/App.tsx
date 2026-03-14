@@ -32,43 +32,30 @@ function App() {
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 px-4 py-8 md:py-12">
       {!result ? (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
-          <div className="max-w-6xl mx-auto">
-            <header className="text-center mb-12">
-              <h1 className="text-5xl font-bold text-gray-900 mb-4">Sloy</h1>
-              <p className="text-xl text-gray-600">
-                Автоматическая оцифровка чертежей в CAD формат
-              </p>
-            </header>
+        <div className="max-w-6xl mx-auto">
+          <header className="mb-6 md:mb-10">
+            <h1 className="text-4xl md:text-5xl font-bold text-slate-900">Sloy</h1>
+            <p className="mt-2 text-base md:text-lg text-slate-600">
+              Автоматическая оцифровка чертежей в CAD формат
+            </p>
+          </header>
 
-            {error && (
-              <div className="mb-8 bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-800">{error}</p>
-              </div>
-            )}
-
-            <div className="bg-white rounded-lg shadow-xl p-8">
-              <ImageUploader
-                onUploadSuccess={handleUploadSuccess}
-                onUploadError={handleUploadError}
-              />
+          {error && (
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+              {error}
             </div>
+          )}
 
-            <footer className="mt-12 text-center text-gray-600 text-sm">
-              <p>Загрузите фото чертежа для автоматической конвертации в DXF</p>
-            </footer>
-          </div>
+          <ImageUploader onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} />
         </div>
       ) : (
-        <ResultsPage
-          result={result}
-          onDownload={handleDownload}
-          onReset={handleReset}
-        />
+        <div className="max-w-6xl mx-auto">
+          <ResultsPage result={result} onDownload={handleDownload} onReset={handleReset} />
+        </div>
       )}
-    </>
+    </div>
   );
 }
 

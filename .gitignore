@@ -59,6 +59,9 @@ logs/
 # OMC
 .omc/
 
+# Claude Code
+.claude/
+
 # Test outputs
 backend/test_*.jpg
 backend/test_*.png
@@ -74,3 +77,26 @@ backend/dxf/
 uploads/
 processed/
 dxf/
+
+# Local debug artifacts
+backend/_debug_*
+backend/*_output*.dxf
+backend/final_test.dxf
+backend/frame2_*
+backend/processed_debug/
+backend/backend/
+
+# Local helper scripts
+backend/*.bat
+backend/*.ps1
+frontend/*.bat
+/*.bat
+
+# Local test artifacts in repo root
+/test_*.dxf
+/test_*.png
+/test_*.jpg
+/test_cad_input.png
+/test_direct_export.dxf
+/test_export*.dxf
+/test_output.dxf

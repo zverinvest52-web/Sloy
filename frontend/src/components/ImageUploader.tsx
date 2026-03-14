@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ProcessResponse } from '../types';
 import { validateImageFile, validateProcessResponse } from '../utils/validation';
 
@@ -9,17 +9,82 @@ interface ImageUploaderProps {
   onUploadError: (error: string) => void;
 }
 
+type SelectedImage = {
+  id: string;
+  file: File;
+  previewUrl: string;
+};
+
 export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageUploaderProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFile = useCallback(async (file: File) => {
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      onUploadError(validation.error || 'Неверный файл');
-      return;
+  const [images, setImages] = useState<SelectedImage[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const activeImage = useMemo(() => images.find((i) => i.id === activeId) || null, [images, activeId]);
+
+  // Cleanup object URLs on unmount (avoid capturing initial empty `images`)
+  const imagesRef = useRef<SelectedImage[]>([]);
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+
+  useEffect(() => {
+    return () => {
+      for (const img of imagesRef.current) URL.revokeObjectURL(img.previewUrl);
+    };
+  }, []);
+
+  const addFiles = useCallback((files: File[]) => {
+    const next: SelectedImage[] = [];
+
+    for (const file of files) {
+      const validation = validateImageFile(file);
+      if (!validation.valid) {
+        onUploadError(validation.error || 'Неверный файл');
+        continue;
+      }
+
+      next.push({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(16).slice(2)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
     }
 
+    if (next.length === 0) return;
+
+    setImages((prev) => {
+      const merged = [...prev, ...next];
+      return merged;
+    });
+
+    setActiveId((prevActive) => prevActive || next[0].id);
+  }, [onUploadError]);
+
+  const removeImage = useCallback((id: string) => {
+    setImages((prev) => {
+      const img = prev.find((x) => x.id === id);
+      if (img) URL.revokeObjectURL(img.previewUrl);
+      const next = prev.filter((x) => x.id !== id);
+
+      // Adjust active selection
+      if (activeId === id) {
+        setActiveId(next[0]?.id ?? null);
+      }
+
+      return next;
+    });
+  }, [activeId]);
+
+  const handleBrowse = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const uploadFile = useCallback(async (file: File) => {
     setIsUploading(true);
 
     try {
@@ -55,82 +120,143 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
     }
   }, [onUploadSuccess, onUploadError]);
 
+  const handleProcess = useCallback(async () => {
+    if (!activeImage || isUploading) return;
+    await uploadFile(activeImage.file);
+  }, [activeImage, isUploading, uploadFile]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
-  }, []);
+    if (!isUploading) setIsDragging(true);
+  }, [isUploading]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      await handleFile(files[0]);
-    }
-  }, [handleFile]);
+    if (isUploading) return;
 
-  const handleFileInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      await handleFile(files[0]);
-    }
-  }, [handleFile]);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    if (files.length > 0) addFiles(files);
+  }, [addFiles, isUploading]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isUploading) return;
+
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length > 0) addFiles(files);
+
+    // allow selecting same file again
+    e.target.value = '';
+  }, [addFiles, isUploading]);
 
   return (
     <div
-      className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-        isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+      className={`rounded-3xl border border-gray-200 bg-white/70 backdrop-blur-sm p-6 md:p-8 shadow-sm ${
+        isDragging ? 'ring-2 ring-emerald-400' : ''
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      aria-label="Область загрузки файла: перетащите изображение или нажмите для выбора"
     >
-      {isUploading ? (
-        <div className="space-y-4" role="status" aria-live="polite">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" aria-hidden="true"></div>
-          <p className="text-gray-600">Обработка изображения...</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            stroke="currentColor"
-            fill="none"
-            viewBox="0 0 48 48"
-            aria-hidden="true"
-          >
-            <path
-              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <div>
-            <label htmlFor="file-upload" className="cursor-pointer">
-              <span className="text-blue-600 hover:text-blue-500 font-medium">
-                Upload a file
-              </span>
-              <input
-                id="file-upload"
-                type="file"
-                className="sr-only"
-                accept="image/*"
-                onChange={handleFileInput}
-              />
-            </label>
-            <span className="text-gray-600"> or drag and drop</span>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileInput}
+        aria-hidden="true"
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-[96px_1fr] gap-5 md:gap-8">
+        {/* Left: thumbnails */}
+        <div className="order-2 md:order-1">
+          <div className="flex md:flex-col gap-3 md:gap-4 overflow-auto md:overflow-visible pb-1">
+            {images.length === 0 ? (
+              <div className="h-20 w-20 md:h-24 md:w-24 rounded-2xl border border-dashed border-gray-300 bg-gray-50" />
+            ) : (
+              images.map((img) => {
+                const isActive = img.id === activeId;
+                return (
+                  <div key={img.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setActiveId(img.id)}
+                      className={`h-20 w-20 md:h-24 md:w-24 rounded-2xl overflow-hidden border transition ${
+                        isActive ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      aria-label="Выбрать изображение"
+                    >
+                      <img src={img.previewUrl} alt="" className="h-full w-full object-cover" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => removeImage(img.id)}
+                      className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-white shadow border border-gray-200 text-gray-600 hover:text-gray-900"
+                      aria-label="Удалить изображение"
+                      disabled={isUploading}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
-          <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
         </div>
-      )}
+
+        {/* Right: preview */}
+        <div className="order-1 md:order-2">
+          <div className="rounded-3xl border border-gray-200 bg-white overflow-hidden">
+            <div className="aspect-[16/10] w-full bg-gray-50">
+              {activeImage ? (
+                <img src={activeImage.previewUrl} alt="Предпросмотр" className="h-full w-full object-contain" />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center px-6 text-center">
+                  <div>
+                    <div className="text-gray-800 font-semibold text-lg mb-1">Добавьте фото чертежа</div>
+                    <div className="text-gray-500 text-sm">Перетащите сюда или выберите через «Обзор»</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 md:p-5 flex items-center justify-between gap-3">
+              <div className="text-xs text-gray-500">
+                {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleBrowse}
+                  disabled={isUploading}
+                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium transition disabled:opacity-60"
+                >
+                  Обзор
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleProcess}
+                  disabled={!activeImage || isUploading}
+                  aria-disabled={!activeImage || isUploading}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-emerald-500"
+                >
+                  {isUploading ? 'Обработка…' : 'Обработать'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
