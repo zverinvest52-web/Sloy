@@ -89,7 +89,7 @@ export default function CustomSlider({ bottomImage, topImage }: CustomSliderProp
       aria-valuemax={100}
       aria-valuetext={`${Math.round(sliderPosition)}% векторизации видно`}
       tabIndex={0}
-      className="relative w-full aspect-[16/10] overflow-hidden rounded-2xl cursor-col-resize select-none focus:outline-none focus:ring-4 focus:ring-black/10"
+      className="relative w-full h-full overflow-hidden rounded-2xl cursor-col-resize select-none focus:outline-none focus:ring-4 focus:ring-black/10"
       onMouseDown={handleMouseDown}
       onTouchStart={handleMouseDown}
       onKeyDown={handleKeyDown}
