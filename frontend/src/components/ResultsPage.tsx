@@ -49,7 +49,7 @@ export default function ResultsPage({ result, onDownload, onReset }: ResultsPage
         {beforeImageUrl && afterImageUrl ? (
           <CustomSlider bottomImage={afterImageUrl} topImage={beforeImageUrl} />
         ) : (
-          <div className="w-full aspect-video rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+          <div className="w-full aspect-[16/10] rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center">
             <p className="text-slate-500 text-sm">Изображения недоступны</p>
           </div>
         )}
