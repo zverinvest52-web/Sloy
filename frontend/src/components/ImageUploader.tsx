@@ -181,9 +181,9 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
             <div className="p-7">
               <div className="text-sm font-semibold text-[#111111] mb-4">Загрузка</div>
 
-              <div className="flex gap-5 items-start">
+              <div className="flex flex-col h-[320px]">
             {/* Thumbs scroll */}
-            <div className="w-24 h-[320px] rounded-2xl overflow-hidden">
+            <div className="w-24 h-[320px] rounded-2xl overflow-hidden mb-5">
               <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {images.length === 0 ? (
                   <div className="h-24 w-24 rounded-2xl bg-[#F8F8F8]" />
@@ -221,15 +221,12 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
               </div>
             </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-[#909090] mb-2">
-                {isUploading ? 'Обработка…' : 'Добавьте фото чертежа'}
-              </div>
+            <div className="mt-auto">
               <button
                 type="button"
                 onClick={handleBrowse}
                 disabled={isUploading}
-                className="w-full px-4 py-3 rounded-2xl bg-white/70 hover:bg-white text-[#111111] font-semibold transition disabled:opacity-60"
+                className="w-full px-4 py-3 rounded-2xl bg-white/70 hover:bg-white text-[#111111] font-semibold transition disabled:opacity-60 text-left"
               >
                 Обзор
               </button>
