@@ -240,41 +240,30 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
 
           {/* Right card */}
           <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="p-5 md:p-6">
-              <div className="rounded-3xl bg-[#EEEEEE] overflow-hidden">
-                <div className="aspect-[16/10] w-full bg-[#EEEEEE]">
-                  {activeImage ? (
-                    <img
-                      src={activeImage.previewUrl}
-                      alt="Предпросмотр"
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center px-6 text-center">
-                      <div>
-                        <div className="text-[#111111] font-semibold text-lg mb-1">Добавьте фото чертежа</div>
-                        <div className="text-[#909090] text-sm">Перетащите сюда или выберите через «Обзор»</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+            <div className="p-7 flex flex-col gap-5">
+              {/* Preview should take full card width (within padding) */}
+              <div className="w-full aspect-[16/10] rounded-3xl bg-[#EEEEEE] overflow-hidden">
+                {activeImage ? (
+                  <img
+                    src={activeImage.previewUrl}
+                    alt="Предпросмотр"
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <div className="h-full w-full" />
+                )}
               </div>
 
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-xs text-[#909090]">
-                  {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleProcess}
-                  disabled={!activeImage || isUploading}
-                  aria-disabled={!activeImage || isUploading}
-                  className="px-6 py-2.5 rounded-2xl bg-[#6B9860] hover:bg-[#5F8756] text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860]"
-                >
-                  {isUploading ? 'Обработка…' : 'Обработать'}
-                </button>
-              </div>
+              {/* Only the button at the bottom */}
+              <button
+                type="button"
+                onClick={handleProcess}
+                disabled={!activeImage || isUploading}
+                aria-disabled={!activeImage || isUploading}
+                className="w-full px-6 py-3 rounded-2xl bg-[#6B9860] hover:bg-[#5F8756] text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860]"
+              >
+                {isUploading ? 'Обработка…' : 'Обработать'}
+              </button>
             </div>
           </div>
       </div>
