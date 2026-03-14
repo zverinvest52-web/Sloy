@@ -160,29 +160,30 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
 
   return (
     <div
-      className={`grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 md:gap-8 ${
-        isDragging ? 'ring-2 ring-black/10 rounded-3xl' : ''
-      }`}
+      className={`${isDragging ? 'ring-2 ring-black/10 rounded-3xl' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handleFileInput}
-        aria-hidden="true"
-      />
+      {/* Outer light-gray shared panel (as in mock) */}
+      <div className="rounded-3xl bg-[#EEEEEE] p-6 md:p-7">
+        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 md:gap-8">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleFileInput}
+            aria-hidden="true"
+          />
 
-      {/* Left card */}
-      <div className="rounded-3xl bg-[#E8E8E8] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-        <div className="p-5 md:p-6">
-          <div className="text-sm font-semibold text-[#111111] mb-4">Загрузка</div>
+          {/* Left card */}
+          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
+            <div className="p-5 md:p-6">
+              <div className="text-sm font-semibold text-[#111111] mb-4">Загрузка</div>
 
-          <div className="flex md:flex-col gap-4 md:gap-5 items-start">
+              <div className="flex md:flex-col gap-4 md:gap-5 items-start">
             {/* Thumbs scroll */}
             <div className="w-20 md:w-24 h-[264px] md:h-[320px] rounded-2xl overflow-hidden">
               <div className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col gap-3 md:gap-4">
@@ -239,38 +240,44 @@ export default function ImageUploader({ onUploadSuccess, onUploadError }: ImageU
         </div>
       </div>
 
-      {/* Right card */}
-      <div className="rounded-3xl bg-[#E8E8E8] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-        <div className="p-5 md:p-6">
-          <div className="rounded-3xl bg-white/60 overflow-hidden">
-            <div className="aspect-[16/10] w-full bg-white/30">
-              {activeImage ? (
-                <img src={activeImage.previewUrl} alt="Предпросмотр" className="h-full w-full object-contain" />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center px-6 text-center">
-                  <div>
-                    <div className="text-[#111111] font-semibold text-lg mb-1">Добавьте фото чертежа</div>
-                    <div className="text-[#909090] text-sm">Перетащите сюда или выберите через «Обзор»</div>
-                  </div>
+          {/* Right card */}
+          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
+            <div className="p-5 md:p-6">
+              <div className="rounded-3xl bg-[#EEEEEE] overflow-hidden">
+                <div className="aspect-[16/10] w-full bg-[#EEEEEE]">
+                  {activeImage ? (
+                    <img
+                      src={activeImage.previewUrl}
+                      alt="Предпросмотр"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center px-6 text-center">
+                      <div>
+                        <div className="text-[#111111] font-semibold text-lg mb-1">Добавьте фото чертежа</div>
+                        <div className="text-[#909090] text-sm">Перетащите сюда или выберите через «Обзор»</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="text-xs text-[#909090]">
-              {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
-            </div>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="text-xs text-[#909090]">
+                  {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
+                </div>
 
-            <button
-              type="button"
-              onClick={handleProcess}
-              disabled={!activeImage || isUploading}
-              aria-disabled={!activeImage || isUploading}
-              className="px-6 py-2.5 rounded-2xl bg-[#6B9860] hover:bg-[#5F8756] text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860]"
-            >
-              {isUploading ? 'Обработка…' : 'Обработать'}
-            </button>
+                <button
+                  type="button"
+                  onClick={handleProcess}
+                  disabled={!activeImage || isUploading}
+                  aria-disabled={!activeImage || isUploading}
+                  className="px-6 py-2.5 rounded-2xl bg-[#6B9860] hover:bg-[#5F8756] text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860]"
+                >
+                  {isUploading ? 'Обработка…' : 'Обработать'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

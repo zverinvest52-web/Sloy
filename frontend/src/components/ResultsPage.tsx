@@ -19,7 +19,7 @@ export default function ResultsPage({ result, onDownload, onReset }: ResultsPage
   const afterImageUrl = sanitizeUrl(result.vector_preview_url || result.processed_url || '', API_URL);
 
   return (
-    <div className="rounded-3xl border border-[#F0F0F0] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
+    <div className="rounded-3xl bg-[#F5F5F5] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
       <div className="px-6 py-5 md:px-8 md:py-7 border-b border-[#F0F0F0]">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
