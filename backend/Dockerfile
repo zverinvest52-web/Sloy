@@ -10,12 +10,12 @@ RUN apt-get update \
 WORKDIR /app
 
 # Install Python deps
-COPY requirements.txt ./
+COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend code (this Dockerfile is intended to be built with build context = ./backend)
-COPY . .
+# Copy backend code
+COPY backend ./backend
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
