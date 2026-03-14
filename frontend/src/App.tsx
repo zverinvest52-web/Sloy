@@ -32,18 +32,11 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] px-4 py-8 md:py-12">
+    <div className="min-h-screen bg-white px-4 py-8 md:py-12">
       {!result ? (
         <div className="max-w-6xl mx-auto">
-          <header className="mb-6 md:mb-10">
-            <h1 className="text-4xl md:text-5xl font-bold text-slate-900">Sloy</h1>
-            <p className="mt-2 text-base md:text-lg text-slate-600">
-              Автоматическая оцифровка чертежей в CAD формат
-            </p>
-          </header>
-
           {error && (
-            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+            <div className="mb-6 rounded-2xl border border-[#C54545]/20 bg-[#C54545]/10 px-4 py-3 text-[#C54545]">
               {error}
             </div>
           )}
