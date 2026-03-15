@@ -6,26 +6,20 @@ import { sanitizeUrl, validateImageFile, validateProcessResponse } from '../util
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 interface ImageUploaderProps {
-  onUploadSuccess: (result: ProcessResponse) => void;
   onUploadError: (error: string) => void;
-
-  result: ProcessResponse | null;
-  onDownload: () => void;
-  onReset: () => void;
 }
 
 type SelectedImage = {
   id: string;
   file: File;
   previewUrl: string;
+  status: 'idle' | 'processing' | 'completed' | 'error';
+  result?: ProcessResponse;
+  error?: string;
 };
 
 export default function ImageUploader({
-  onUploadSuccess,
   onUploadError,
-  result,
-  onDownload,
-  onReset,
 }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -34,6 +28,7 @@ export default function ImageUploader({
 
   const [images, setImages] = useState<SelectedImage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const activeImage = useMemo(() => images.find((i) => i.id === activeId) || null, [images, activeId]);
 
@@ -63,6 +58,7 @@ export default function ImageUploader({
         id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(16).slice(2)}`,
         file,
         previewUrl: URL.createObjectURL(file),
+        status: 'idle',
       });
     }
 
@@ -96,8 +92,13 @@ export default function ImageUploader({
     fileInputRef.current?.click();
   }, []);
 
-  const uploadFile = useCallback(async (file: File) => {
+  const uploadFile = useCallback(async (imageId: string, file: File) => {
     setIsUploading(true);
+
+    // Set image status to processing
+    setImages((prev) => prev.map((img) =>
+      img.id === imageId ? { ...img, status: 'processing' as const, error: undefined } : img
+    ));
 
     try {
       const formData = new FormData();
@@ -120,22 +121,58 @@ export default function ImageUploader({
       }
 
       if (data.success) {
-        onUploadSuccess(data as ProcessResponse);
+        // Store result in the image
+        setImages((prev) => prev.map((img) =>
+          img.id === imageId ? { ...img, status: 'completed' as const, result: data as ProcessResponse } : img
+        ));
       } else {
-        onUploadError(data.error || 'Ошибка загрузки');
+        const errorMsg = data.error || 'Ошибка загрузки';
+        setImages((prev) => prev.map((img) =>
+          img.id === imageId ? { ...img, status: 'error' as const, error: errorMsg } : img
+        ));
+        onUploadError(errorMsg);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
+      setImages((prev) => prev.map((img) =>
+        img.id === imageId ? { ...img, status: 'error' as const, error: msg } : img
+      ));
       onUploadError(msg || 'Ошибка сети. Попробуйте снова.');
     } finally {
       setIsUploading(false);
     }
-  }, [onUploadSuccess, onUploadError]);
+  }, [onUploadError]);
 
   const handleProcess = useCallback(async () => {
     if (!activeImage || isUploading) return;
-    await uploadFile(activeImage.file);
+    await uploadFile(activeImage.id, activeImage.file);
   }, [activeImage, isUploading, uploadFile]);
+
+  const handleReset = useCallback(async () => {
+    if (!activeImage || isUploading) return;
+    // Reset the current image and re-process
+    setImages((prev) => prev.map((img) =>
+      img.id === activeImage.id ? { ...img, status: 'idle' as const, result: undefined, error: undefined } : img
+    ));
+    await uploadFile(activeImage.id, activeImage.file);
+  }, [activeImage, isUploading, uploadFile]);
+
+  const handleDownload = useCallback(() => {
+    if (!activeImage?.result?.dxf_url) return;
+    const url = `${API_URL}${activeImage.result.dxf_url}`;
+    window.open(url, '_blank');
+    setShowDeleteModal(true);
+  }, [activeImage]);
+
+  const handleDeleteImage = useCallback(() => {
+    if (!activeId) return;
+    removeImage(activeId);
+    setShowDeleteModal(false);
+  }, [activeId, removeImage]);
+
+  const handleKeepImage = useCallback(() => {
+    setShowDeleteModal(false);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -255,10 +292,10 @@ export default function ImageUploader({
 
                 <div className="rounded-3xl bg-[#EEEEEE] overflow-hidden flex-1 min-h-0">
                   <div className="h-full w-full bg-[#EEEEEE]">
-                    {result?.warped_original_url || result?.original_url || result?.vector_preview_url || result?.processed_url ? (
+                    {activeImage?.result?.warped_original_url || activeImage?.result?.original_url || activeImage?.result?.vector_preview_url || activeImage?.result?.processed_url ? (
                       <CustomSlider
-                        bottomImage={sanitizeUrl(result.vector_preview_url || result.processed_url || '', API_URL) || ''}
-                        topImage={sanitizeUrl(result.warped_original_url || result.original_url || '', API_URL) || ''}
+                        bottomImage={sanitizeUrl(activeImage.result.vector_preview_url || activeImage.result.processed_url || '', API_URL) || ''}
+                        topImage={sanitizeUrl(activeImage.result.warped_original_url || activeImage.result.original_url || '', API_URL) || ''}
                       />
                     ) : activeImage ? (
                       <img
@@ -279,23 +316,23 @@ export default function ImageUploader({
 
                 <div className="mt-auto flex items-center justify-between gap-3">
                   <div className="text-xs text-[#909090]">
-                    {isUploading ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
+                    {activeImage?.status === 'processing' ? 'Обработка…' : 'Поддерживаются PNG/JPG до 10MB'}
                   </div>
 
-                  {result ? (
+                  {activeImage?.status === 'completed' && activeImage.result ? (
                     <div className="inline-flex">
                       <button
                         type="button"
-                        onClick={onDownload}
-                        disabled={!result.dxf_url}
-                        aria-disabled={!result.dxf_url}
+                        onClick={handleDownload}
+                        disabled={!activeImage.result.dxf_url}
+                        aria-disabled={!activeImage.result.dxf_url}
                         className="px-6 py-2.5 font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860] bg-[#6B9860] hover:bg-[#5F8756] text-white border border-[#6B9860] rounded-l-2xl rounded-r-[10px]"
                       >
                         Экспорт DXF
                       </button>
                       <button
                         type="button"
-                        onClick={onReset}
+                        onClick={handleReset}
                         className="px-6 py-2.5 font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] -ml-px rounded-r-2xl rounded-l-[10px]"
                         aria-label="Загрузить заново"
                         title="Заново"
@@ -307,11 +344,11 @@ export default function ImageUploader({
                     <button
                       type="button"
                       onClick={handleProcess}
-                      disabled={!activeImage || isUploading}
-                      aria-disabled={!activeImage || isUploading}
+                      disabled={!activeImage || activeImage?.status === 'processing'}
+                      aria-disabled={!activeImage || activeImage?.status === 'processing'}
                       className="px-6 py-2.5 rounded-2xl bg-[#6B9860] hover:bg-[#5F8756] text-white font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860]"
                     >
-                      {isUploading ? 'Обработка…' : 'Обработать'}
+                      {activeImage?.status === 'processing' ? 'Обработка…' : 'Обработать'}
                     </button>
                   )}
                 </div>
@@ -319,6 +356,34 @@ export default function ImageUploader({
             </div>
           </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-md mx-4 shadow-2xl">
+            <h3 className="text-xl font-semibold text-[#111111] mb-3">Файл скачан</h3>
+            <p className="text-[#909090] mb-6">
+              Изображение успешно экспортировано. Удалить его из программы?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleDeleteImage}
+                className="flex-1 px-6 py-2.5 rounded-2xl bg-[#C54545] hover:bg-[#B33F3F] text-white font-semibold transition"
+              >
+                Удалить
+              </button>
+              <button
+                type="button"
+                onClick={handleKeepImage}
+                className="flex-1 px-6 py-2.5 rounded-2xl bg-[#919191] hover:bg-[#858585] text-white font-semibold transition"
+              >
+                Оставить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

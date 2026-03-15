@@ -1,33 +1,12 @@
 import { useState } from 'react';
 import ImageUploader from './components/ImageUploader';
-import { ProcessResponse } from './types';
 import './App.css';
 
 function App() {
-  const [result, setResult] = useState<ProcessResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const handleUploadSuccess = (data: ProcessResponse) => {
-    setResult(data);
-    setError(null);
-  };
 
   const handleUploadError = (errorMsg: string) => {
     setError(errorMsg);
-    setResult(null);
-  };
-
-  const handleDownload = () => {
-    if (result?.dxf_url) {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const url = `${API_URL}${result.dxf_url}`;
-      window.open(url, '_blank');
-    }
-  };
-
-  const handleReset = () => {
-    setResult(null);
-    setError(null);
   };
 
   return (
@@ -40,11 +19,7 @@ function App() {
         )}
 
         <ImageUploader
-          onUploadSuccess={handleUploadSuccess}
           onUploadError={handleUploadError}
-          result={result}
-          onDownload={handleDownload}
-          onReset={handleReset}
         />
       </div>
     </div>
