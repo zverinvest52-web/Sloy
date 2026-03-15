@@ -320,20 +320,20 @@ export default function ImageUploader({
                   </div>
 
                   {activeImage?.status === 'completed' && activeImage.result ? (
-                    <div className="inline-flex gap-2">
+                    <div className="inline-flex gap-1">
                       <button
                         type="button"
                         onClick={handleDownload}
                         disabled={!activeImage.result.dxf_url}
                         aria-disabled={!activeImage.result.dxf_url}
-                        className="px-6 py-2.5 font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860] bg-[#6B9860] hover:bg-[#5F8756] text-white border border-[#6B9860] rounded-2xl"
+                        className="px-6 py-2.5 font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860] bg-[#6B9860] hover:bg-[#5F8756] text-white border border-[#6B9860] rounded-l-2xl rounded-r-[6px]"
                       >
                         Экспорт DXF
                       </button>
                       <button
                         type="button"
                         onClick={handleReset}
-                        className="w-[42px] h-[42px] flex items-center justify-center font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] rounded-2xl"
+                        className="w-[42px] h-[42px] flex items-center justify-center font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] rounded-r-2xl rounded-l-[6px]"
                         aria-label="Загрузить заново"
                         title="Заново"
                       >
