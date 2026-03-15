@@ -320,7 +320,7 @@ export default function ImageUploader({
                   </div>
 
                   {activeImage?.status === 'completed' && activeImage.result ? (
-                    <div className="inline-flex gap-1">
+                    <div className="inline-flex gap-1 items-stretch">
                       <button
                         type="button"
                         onClick={handleDownload}
@@ -333,7 +333,7 @@ export default function ImageUploader({
                       <button
                         type="button"
                         onClick={handleReset}
-                        className="w-[42px] h-[42px] flex items-center justify-center font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] rounded-r-2xl rounded-l-[6px]"
+                        className="w-[42px] flex items-center justify-center font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] rounded-r-2xl rounded-l-[6px]"
                         aria-label="Загрузить заново"
                         title="Заново"
                       >
