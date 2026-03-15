@@ -10,19 +10,17 @@ function App() {
   };
 
   return (
-    <div className="h-screen bg-white overflow-hidden">
-      <div className="mx-auto w-[1047px] h-full flex flex-col pt-[70px] pb-12">
+    <div className="min-h-screen bg-white">
+      <div className="mx-auto w-[1047px] overflow-hidden pt-[99px] pb-16">
         {error && (
-          <div className="mb-4 rounded-2xl border border-[#C54545]/20 bg-[#C54545]/10 px-4 py-3 text-[#C54545] flex-shrink-0">
+          <div className="mb-6 rounded-2xl border border-[#C54545]/20 bg-[#C54545]/10 px-4 py-3 text-[#C54545]">
             {error}
           </div>
         )}
 
-        <div className="flex-1 min-h-0">
-          <ImageUploader
-            onUploadError={handleUploadError}
-          />
-        </div>
+        <ImageUploader
+          onUploadError={handleUploadError}
+        />
       </div>
     </div>
   );
