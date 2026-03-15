@@ -320,24 +320,27 @@ export default function ImageUploader({
                   </div>
 
                   {activeImage?.status === 'completed' && activeImage.result ? (
-                    <div className="inline-flex">
+                    <div className="inline-flex gap-2">
                       <button
                         type="button"
                         onClick={handleDownload}
                         disabled={!activeImage.result.dxf_url}
                         aria-disabled={!activeImage.result.dxf_url}
-                        className="px-6 py-2.5 font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860] bg-[#6B9860] hover:bg-[#5F8756] text-white border border-[#6B9860] rounded-l-2xl rounded-r-[10px]"
+                        className="px-6 py-2.5 font-semibold transition disabled:opacity-50 disabled:hover:bg-[#6B9860] bg-[#6B9860] hover:bg-[#5F8756] text-white border border-[#6B9860] rounded-2xl"
                       >
                         Экспорт DXF
                       </button>
                       <button
                         type="button"
                         onClick={handleReset}
-                        className="px-6 py-2.5 font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] -ml-px rounded-r-2xl rounded-l-[10px]"
+                        className="w-[42px] h-[42px] flex items-center justify-center font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] rounded-2xl"
                         aria-label="Загрузить заново"
                         title="Заново"
                       >
-                        Заново
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M17.5 10C17.5 14.1421 14.1421 17.5 10 17.5C5.85786 17.5 2.5 14.1421 2.5 10C2.5 5.85786 5.85786 2.5 10 2.5C12.0711 2.5 13.9461 3.35714 15.3033 4.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          <path d="M15 2V5H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
                       </button>
                     </div>
                   ) : (
