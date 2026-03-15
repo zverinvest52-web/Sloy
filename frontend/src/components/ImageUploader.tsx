@@ -206,12 +206,12 @@ export default function ImageUploader({
 
   return (
     <div
-      className={`${isDragging ? 'ring-2 ring-black/10 rounded-3xl' : ''}`}
+      className={`h-full ${isDragging ? 'ring-2 ring-black/10 rounded-3xl' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="grid grid-cols-[260px_1fr] gap-8 justify-items-stretch items-start">
+      <div className="grid grid-cols-[260px_1fr] gap-8 justify-items-stretch items-stretch h-full">
         <input
             ref={fileInputRef}
             type="file"
@@ -223,9 +223,9 @@ export default function ImageUploader({
           />
 
           {/* Left card */}
-          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="p-7">
-              <div className="flex flex-col h-[420px] gap-5">
+          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden h-full">
+            <div className="p-7 h-full">
+              <div className="flex flex-col h-full gap-5">
                 {/* Photos list: fills all space between top padding and bottom button */}
                 <div className="w-full flex-1 min-h-0 rounded-2xl overflow-hidden">
                   <div className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -282,9 +282,9 @@ export default function ImageUploader({
       </div>
 
           {/* Right card */}
-          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="p-7">
-              <div className="flex flex-col h-[420px] gap-5">
+          <div className="rounded-3xl bg-white border border-[#F0F0F0] shadow-[0_10px_30px_rgba(0,0,0,0.06)] overflow-hidden h-full">
+            <div className="p-7 h-full">
+              <div className="flex flex-col h-full gap-5">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Было</div>
                   <div className="text-xs font-semibold text-[#909090] uppercase tracking-wide">Стало</div>
