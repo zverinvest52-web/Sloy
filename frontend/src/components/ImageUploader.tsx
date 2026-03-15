@@ -333,7 +333,7 @@ export default function ImageUploader({
                       <button
                         type="button"
                         onClick={handleReset}
-                        className="h-full aspect-square flex items-center justify-center font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] rounded-r-2xl rounded-l-[6px]"
+                        className="w-[42px] flex items-center justify-center font-semibold transition bg-[#C54545] hover:bg-[#B33F3F] text-white border border-[#C54545] rounded-r-2xl rounded-l-[6px]"
                         aria-label="Загрузить заново"
                         title="Заново"
                       >
