@@ -303,14 +303,34 @@ class CADConverter:
 
 
     def _extract_circles(self, image: np.ndarray) -> List[Circle]:
-        """Extract circles using contour circularity.
+        """Extract circles using contour circularity and Hough transform.
 
         Expects image with white drawing on black background.
+        Uses both methods and merges results for better detection.
         """
-        circles = self._extract_circles_contour(image)
-        if circles:
-            return circles
-        return self._extract_circles_hough(image)
+        circles_contour = self._extract_circles_contour(image)
+        circles_hough = self._extract_circles_hough(image)
+
+        # Merge results, removing duplicates
+        all_circles = circles_contour + circles_hough
+
+        if not all_circles:
+            return []
+
+        # Remove near-duplicates
+        unique_circles = []
+        for c in all_circles:
+            is_duplicate = False
+            for existing in unique_circles:
+                dist = np.sqrt((c.x - existing.x)**2 + (c.y - existing.y)**2)
+                radius_diff = abs(c.radius - existing.radius)
+                if dist < 5.0 * self.scale_factor and radius_diff < 5.0 * self.scale_factor:
+                    is_duplicate = True
+                    break
+            if not is_duplicate:
+                unique_circles.append(c)
+
+        return unique_circles
 
 
     def _extract_circles_contour(self, image: np.ndarray) -> List[Circle]:
@@ -372,8 +392,10 @@ class CADConverter:
         if not circles:
             return []
 
-        circles.sort(key=lambda c: c.radius, reverse=(not self.hough_prefer_smaller))
-        return circles[:1]
+        # Return all detected circles, not just the top 1
+        # Sort by radius for consistency
+        circles.sort(key=lambda c: c.radius)
+        return circles
 
     def _extract_circles_hough(self, image: np.ndarray) -> List[Circle]:
         """Fallback circle detector for cases where contour fit fails (thick strokes)."""
@@ -422,13 +444,9 @@ class CADConverter:
         if not dedup:
             return []
 
-        # Prefer smaller radius if enabled (common when Hough finds inner+outer).
-        if self.hough_prefer_smaller:
-            dedup.sort(key=lambda c: c.radius)
-        else:
-            dedup.sort(key=lambda c: c.radius, reverse=True)
-
-        return dedup[: max(1, int(self.hough_keep_top))]
+        # Return all unique circles, sorted by radius
+        dedup.sort(key=lambda c: c.radius)
+        return dedup
 
 
     def __init__(self, scale_factor: float = 1.0):
@@ -446,8 +464,8 @@ class CADConverter:
         self.circle_min_dist = 50
         self.circle_param1 = 50
         self.circle_param2 = 30
-        self.circle_min_radius = 10
-        self.circle_max_radius = 200
+        self.circle_min_radius = 3  # Lowered from 10 to detect small circles
+        self.circle_max_radius = 500  # Increased from 200 for larger holes
 
     def extract_elements(self, binary_image: np.ndarray) -> CADElements:
         """Extract polylines, lines, and circles from a (mostly) binary image.
@@ -518,12 +536,24 @@ class CADConverter:
                     cv2.polylines(mask, [pts], isClosed=True, color=(255,), thickness=erase_thickness)
             residual = cv2.bitwise_and(working_image, cv2.bitwise_not(mask))
 
-        # 3) Circles from residual (prevents corner/outline interference).
-        # If we fail to find circles in residual (e.g., circle got merged into the outer contour
-        # on noisy photos), fall back to detecting on the full working image.
-        circles = self._extract_circles(residual)
-        if not circles:
-            circles = self._extract_circles(working_image)
+        # 3) Circles: detect on BOTH residual and full image, then merge
+        # This helps find circles that are close to contours
+        circles_residual = self._extract_circles(residual)
+        circles_full = self._extract_circles(working_image)
+
+        # Merge and deduplicate
+        all_circles = circles_residual + circles_full
+        circles = []
+        for c in all_circles:
+            is_duplicate = False
+            for existing in circles:
+                dist = np.sqrt((c.x - existing.x)**2 + (c.y - existing.y)**2)
+                radius_diff = abs(c.radius - existing.radius)
+                if dist < 5.0 * self.scale_factor and radius_diff < 5.0 * self.scale_factor:
+                    is_duplicate = True
+                    break
+            if not is_duplicate:
+                circles.append(c)
 
         # Merge any circles we promoted from polylines.
         if circles_from_polylines:
