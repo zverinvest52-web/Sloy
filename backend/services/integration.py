@@ -41,14 +41,20 @@ def apply_cad_constraints_to_elements(
         logger.info("CAD solver disabled, returning original elements")
         return elements
 
-    logger.info("Applying CAD solver constraints")
+    logger.info(f"Applying CAD solver constraints to {len(elements.polylines)} polylines and {len(elements.lines)} lines")
 
     # Convert Polyline objects to list format
     polylines_list = [pl.points for pl in elements.polylines]
 
-    if not polylines_list:
-        logger.info("No polylines to process")
+    if not polylines_list and not elements.lines:
+        logger.info("No polylines or lines to process")
         return elements
+
+    # If no polylines but we have lines, convert lines to polylines for processing
+    if not polylines_list and elements.lines:
+        logger.info("Converting standalone lines to polylines for CAD solver")
+        for line in elements.lines:
+            polylines_list.append([(line.x1, line.y1), (line.x2, line.y2)])
 
     # Initialize CAD solver
     solver = CADSolver(
@@ -66,19 +72,38 @@ def apply_cad_constraints_to_elements(
             logger.warning("Validation failed, returning original elements")
             return elements
 
+        # Log changes
+        original_vertices = sum(len(pl.points) for pl in elements.polylines) + len(elements.lines) * 2
+        new_vertices = sum(len(pl) for pl in constrained_polylines)
+        logger.info(f"CAD solver: {original_vertices} vertices -> {new_vertices} vertices")
+
         # Convert back to Polyline objects
         new_polylines = []
+        num_original_polylines = len(elements.polylines)
+
         for i, points in enumerate(constrained_polylines):
-            original_pl = elements.polylines[i]
-            new_polylines.append(Polyline(
-                points=points,
-                closed=original_pl.closed,
-                layer=original_pl.layer
-            ))
+            if i < num_original_polylines:
+                # Original polyline
+                original_pl = elements.polylines[i]
+                new_polylines.append(Polyline(
+                    points=points,
+                    closed=original_pl.closed,
+                    layer=original_pl.layer
+                ))
+            else:
+                # Converted from standalone line
+                new_polylines.append(Polyline(
+                    points=points,
+                    closed=False,
+                    layer="LINES"
+                ))
+
+        # If we converted lines to polylines, clear the lines list
+        new_lines = [] if (not elements.polylines and elements.lines) else elements.lines
 
         # Create new CADElements with constrained polylines
         return CADElements(
-            lines=elements.lines,
+            lines=new_lines,
             circles=elements.circles,
             polylines=new_polylines,
             rectangles=elements.rectangles,
