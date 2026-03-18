@@ -1,11 +1,8 @@
-"""
-CAD conversion module for Sloy project.
-Converts processed images to DXF format using ezdxf.
-"""
+"""CAD conversion module for Sloy project."""
 
 import cv2
 import numpy as np
-import ezdxf  # pyright: ignore[reportPrivateImportUsage]
+import ezdxf
 import logging
 from typing import List, Tuple, Optional
 from dataclasses import dataclass, field
@@ -16,7 +13,7 @@ class Polyline:
     """Represents a polyline (optionally closed)."""
     points: List[Tuple[float, float]]
     closed: bool = False
-    layer: str = "POLYLINES"  # allows simple categorization
+    layer: str = "POLYLINES"
 
 
 def _scale_points(points: np.ndarray, scale: float) -> List[Tuple[float, float]]:
@@ -71,8 +68,6 @@ class CADElements:
     circles: List[Circle] = field(default_factory=list)
     polylines: List[Polyline] = field(default_factory=list)
     rectangles: List[Rectangle] = field(default_factory=list)
-    # DXF coordinate system has Y going "up", while image coordinates have Y going
-    # "down". When provided, we flip Y as: y_dxf = canvas_height - y.
     canvas_height: Optional[float] = None
     canvas_width: Optional[float] = None
 
@@ -80,41 +75,20 @@ class CADElements:
 class CADConverter:
     """Converts binary images to DXF format."""
 
-    # Contour-based extraction is preferred for closed shapes because it produces
-    # connected geometry suitable for DXF polylines (instead of many Hough segments).
     min_contour_area: float = 80.0
-    # Keep only contours that are a meaningful fraction of the largest contour.
-    # This filters UI/text noise on clean screenshots.
     keep_area_ratio_of_max: float = 0.008
     approx_epsilon_ratio: float = 0.01
-    # When using HoughCircles fallback, take only the most plausible circle.
     hough_keep_top: int = 1
-    # If Hough proposes circles with wildly different radii (often outer+inner),
-    # we prefer the smaller one (usually the actual hole/round element in line art).
     hough_prefer_smaller: bool = True
-    # If you need fewer LINE entities for orthogonal shapes, increase
-    # approx_epsilon_ratio (e.g. 0.08–0.12) for that specific case.
-
-
     close_kernel_size: int = 3
     close_iterations: int = 1
     closed_point_dist_thresh: float = 3.0
-
-    # Heuristic: only keep an "interior" line if it's long enough relative to the
-    # detected outer geometry bbox.
     interior_line_min_length_ratio: float = 0.60
     border_touch_margin_px: int = 2
-
-    # Reject stray Hough lines that are not actually inside the detected outer shape.
     interior_line_outside_margin_px: int = 3
     interior_line_min_inside_ratio: float = 0.90
     interior_line_allow_diagonal: bool = False
-
-    # If we do allow diagonals, require them to be close to 45° (typical corner/brace),
-    # not arbitrary angles from noise.
     interior_line_diagonal_tolerance_degrees: float = 7.0
-
-    # Snap nearly-horizontal/vertical lines to perfect axis alignment.
     snap_angle_degrees: float = 3.0
 
     def _line_angle_rad(self, line: Line) -> float:
@@ -131,24 +105,18 @@ class CADConverter:
         min_x, max_x = float(min(xs)), float(max(xs))
         min_y, max_y = float(min(ys)), float(max(ys))
 
-        # Direction and angle normalization
         ang = self._line_angle_rad(line)
-        # Map angle to [0, pi)
         ang = float((ang + np.pi) % np.pi)
         tol = float(np.deg2rad(self.snap_angle_degrees))
 
-        # Snap to horizontal
         if min(ang, abs(np.pi - ang)) <= tol:
             y = float((line.y1 + line.y2) / 2.0)
             return Line(x1=min_x, y1=y, x2=max_x, y2=y)
 
-        # Snap to vertical
         if abs((np.pi / 2.0) - ang) <= tol:
             x = float((line.x1 + line.x2) / 2.0)
             return Line(x1=x, y1=min_y, x2=x, y2=max_y)
 
-        # Otherwise: extend along its direction until it intersects the outer polyline.
-        # We compute intersections of the infinite line with all outer polyline segments.
         p0 = np.array([line.x1, line.y1], dtype=np.float64)
         d = np.array([line.x2 - line.x1, line.y2 - line.y1], dtype=np.float64)
         norm = float(np.hypot(d[0], d[1]))
@@ -157,7 +125,6 @@ class CADConverter:
         d /= norm
 
         def intersect_infinite_with_segment(a: np.ndarray, b: np.ndarray) -> Optional[np.ndarray]:
-            """Return intersection point if infinite line p0+t*d crosses segment a->b."""
             v = b - a
             denom = d[0] * v[1] - d[1] * v[0]
             if abs(float(denom)) < 1e-12:
@@ -185,9 +152,7 @@ class CADConverter:
                 if ip is not None:
                     intersections.append(ip)
 
-        # Fallback: intersect with bbox if polygon intersections failed
         if len(intersections) < 2:
-            # Intersect with rectangle bbox
             rect = [
                 (np.array([min_x, min_y], dtype=np.float64), np.array([max_x, min_y], dtype=np.float64)),
                 (np.array([max_x, min_y], dtype=np.float64), np.array([max_x, max_y], dtype=np.float64)),
@@ -200,7 +165,6 @@ class CADConverter:
                     intersections.append(ip)
 
         if len(intersections) >= 2:
-            # Pick farthest pair
             best_i, best_j = 0, 1
             best_dist = -1.0
             for i in range(len(intersections)):
@@ -217,10 +181,7 @@ class CADConverter:
 
 
     def _extract_polylines(self, image: np.ndarray) -> List[Polyline]:
-        """Extract (mostly closed) polylines from a binary image.
-
-        Expects image with white drawing on black background.
-        """
+        """Extract (mostly closed) polylines from a binary image."""
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         else:
@@ -231,8 +192,6 @@ class CADConverter:
             if not contours:
                 return []
 
-            # Filter tiny contours relative to the largest one.
-            # On clean drawings we typically want only the main geometry contours.
             max_area = 0.0
             for cnt in contours:
                 a = float(cv2.contourArea(cnt))
@@ -255,16 +214,13 @@ class CADConverter:
                 if len(points) < 2:
                     continue
 
-                # Contours returned by findContours are closed by definition.
                 polylines.append(Polyline(points=points, closed=True, layer="POLYLINES"))
 
             return polylines
 
-        # Pass A: no morphology (preserves concavities like "Г" shapes)
         _, bin_raw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY)
         polylines_raw = extract_from(bin_raw)
 
-        # Pass B: morphology close (connects small gaps but can over-smooth concave corners)
         k = np.ones((self.close_kernel_size, self.close_kernel_size), np.uint8)
         closed = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, k, iterations=self.close_iterations)
         _, bin_closed = cv2.threshold(closed, 0, 255, cv2.THRESH_BINARY)
@@ -275,7 +231,6 @@ class CADConverter:
         if not polylines_closed:
             return polylines_raw
 
-        # Prefer the extraction that preserves more vertices (helps avoid turning "Г" into triangles).
         raw_vertices = sum(len(pl.points) for pl in polylines_raw)
         closed_vertices = sum(len(pl.points) for pl in polylines_closed)
         return polylines_raw if raw_vertices >= closed_vertices else polylines_closed
@@ -386,7 +341,6 @@ class CADConverter:
             if r <= 0:
                 continue
 
-            # Radial fit check: average deviation of contour points from radius
             pts = cnt.reshape(-1, 2).astype(np.float32)
             d = np.sqrt((pts[:, 0] - float(cx)) ** 2 + (pts[:, 1] - float(cy)) ** 2)
             mean_dev = float(np.mean(np.abs(d - float(r))))
@@ -401,7 +355,6 @@ class CADConverter:
                 )
             )
 
-        # De-duplicate near-identical circles (common on thick strokes)
         circles: List[Circle] = []
         for c in circles_raw:
             merged = False
@@ -419,8 +372,6 @@ class CADConverter:
         if not circles:
             return []
 
-        # For Sloy drawings we typically expect a single circle; thick strokes can
-        # produce inner+outer contours. Keep only the most plausible one.
         circles.sort(key=lambda c: c.radius, reverse=(not self.hough_prefer_smaller))
         return circles[:1]
 
@@ -531,12 +482,11 @@ class CADConverter:
                     kept_polylines.append(pl)
                     continue
 
-                # Fit quality: average radial deviation in pixels
                 d = np.sqrt((pts_px[:, 0] - float(cx)) ** 2 + (pts_px[:, 1] - float(cy)) ** 2)
                 mean_dev = float(np.mean(np.abs(d - float(r))))
 
-                # Also require near-square bbox (helps reject rounded rectangles)
-                x, y, w, h = cv2.boundingRect(pts_px.astype(np.int32))
+                bbox = cv2.boundingRect(pts_px.astype(np.int32))
+                w, h = bbox[2], bbox[3]
                 ar = float(w) / float(h) if h > 0 else 0.0
 
                 if mean_dev <= 2.5 and 0.85 <= ar <= 1.15:
@@ -675,11 +625,14 @@ class CADConverter:
 
     def _merge_lines(self, lines: List[Line], threshold: float = 10.0) -> List[Line]:
         """
-        Merge lines that are close to each other.
+        Merge collinear lines that are close to each other.
+
+        This significantly improves quality by combining fragmented lines
+        (e.g., dashed lines detected as 50 segments → 1 line).
 
         Args:
             lines: List of lines to merge
-            threshold: Distance threshold for merging (in pixels)
+            threshold: Distance threshold for merging (in scaled units)
 
         Returns:
             Merged list of lines
@@ -687,39 +640,155 @@ class CADConverter:
         if not lines:
             return []
 
-        # Simple merging: if two lines are very close and collinear, merge them
+        logger.info(f"Merging {len(lines)} line segments...")
+
+        # Convert angle tolerance to radians
+        angle_tolerance_deg = 5.0
+        angle_tol_rad = np.deg2rad(angle_tolerance_deg)
+
+        # Calculate angles for all lines
+        lines_with_angles = []
+        for line in lines:
+            angle = np.arctan2(line.y2 - line.y1, line.x2 - line.x1)
+            # Normalize to [0, π)
+            if angle < 0:
+                angle += np.pi
+            lines_with_angles.append((line, angle))
+
+        # Sort by angle for efficient grouping
+        lines_with_angles.sort(key=lambda x: x[1])
+
         merged = []
         used = set()
 
-        for i, line1 in enumerate(lines):
+        for i, (line1, angle1) in enumerate(lines_with_angles):
             if i in used:
                 continue
 
-            # Check if this line can be merged with any other
-            best_match = None
-            best_dist = threshold
+            # Start a new group with this line
+            group = [line1]
+            used.add(i)
 
-            for j, line2 in enumerate(lines[i+1:], start=i+1):
+            # Find all lines with similar angle
+            for j, (line2, angle2) in enumerate(lines_with_angles[i+1:], start=i+1):
                 if j in used:
                     continue
 
-                # Check if lines are close and collinear
-                dist = self._line_distance(line1, line2)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_match = j
+                # Check angle similarity
+                angle_diff = abs(angle1 - angle2)
+                if angle_diff > np.pi / 2:
+                    angle_diff = np.pi - angle_diff
 
-            if best_match is not None:
-                # Merge the two lines
-                merged_line = self._merge_two_lines(line1, lines[best_match])
-                merged.append(merged_line)
-                used.add(i)
-                used.add(best_match)
+                if angle_diff > angle_tol_rad:
+                    continue  # Different angle
+
+                # Check if lines are collinear and close
+                if self._are_collinear_and_close(line1, line2, threshold):
+                    group.append(line2)
+                    used.add(j)
+
+            # Merge the group into a single line
+            if len(group) == 1:
+                merged.append(group[0])
             else:
-                merged.append(line1)
-                used.add(i)
+                merged_line = self._merge_line_group(group)
+                merged.append(merged_line)
 
+        logger.info(f"Merged to {len(merged)} line segments (reduced by {len(lines) - len(merged)})")
         return merged
+
+    def _are_collinear_and_close(self, line1: Line, line2: Line, threshold: float) -> bool:
+        """
+        Check if two lines are collinear and close enough to merge.
+
+        Args:
+            line1: First line
+            line2: Second line
+            threshold: Maximum distance between lines
+
+        Returns:
+            True if lines should be merged
+        """
+        # Get all endpoints
+        p1_start = np.array([line1.x1, line1.y1])
+        p1_end = np.array([line1.x2, line1.y2])
+        p2_start = np.array([line2.x1, line2.y1])
+        p2_end = np.array([line2.x2, line2.y2])
+
+        # Check if any endpoints are close
+        distances = [
+            np.linalg.norm(p1_end - p2_start),
+            np.linalg.norm(p1_start - p2_end),
+            np.linalg.norm(p1_end - p2_end),
+            np.linalg.norm(p1_start - p2_start),
+        ]
+
+        min_dist = min(distances)
+        if min_dist > threshold:
+            return False
+
+        # Check collinearity: distance from line2 endpoints to line1
+        line1_vec = p1_end - p1_start
+        line1_len = np.linalg.norm(line1_vec)
+
+        if line1_len < 1e-6:
+            return False
+
+        line1_unit = line1_vec / line1_len
+
+        # Distance from p2_start to line1
+        vec_to_p2_start = p2_start - p1_start
+        proj_length = np.dot(vec_to_p2_start, line1_unit)
+        closest_point = p1_start + proj_length * line1_unit
+        dist1 = np.linalg.norm(p2_start - closest_point)
+
+        # Distance from p2_end to line1
+        vec_to_p2_end = p2_end - p1_start
+        proj_length = np.dot(vec_to_p2_end, line1_unit)
+        closest_point = p1_start + proj_length * line1_unit
+        dist2 = np.linalg.norm(p2_end - closest_point)
+
+        # Both endpoints should be close to the line
+        return max(dist1, dist2) < threshold
+
+    def _merge_line_group(self, lines: List[Line]) -> Line:
+        """
+        Merge a group of collinear lines into a single line.
+
+        Args:
+            lines: List of collinear lines
+
+        Returns:
+            Single merged line
+        """
+        # Collect all endpoints
+        points = []
+        for line in lines:
+            points.append(np.array([line.x1, line.y1]))
+            points.append(np.array([line.x2, line.y2]))
+
+        points = np.array(points)
+
+        # Find the two farthest points (these will be the endpoints)
+        max_dist = 0
+        best_i, best_j = 0, 1
+
+        for i in range(len(points)):
+            for j in range(i + 1, len(points)):
+                dist = np.linalg.norm(points[i] - points[j])
+                if dist > max_dist:
+                    max_dist = dist
+                    best_i, best_j = i, j
+
+        p1 = points[best_i]
+        p2 = points[best_j]
+
+        return Line(
+            x1=float(p1[0]),
+            y1=float(p1[1]),
+            x2=float(p2[0]),
+            y2=float(p2[1])
+        )
 
     def _line_distance(self, line1: Line, line2: Line) -> float:
         """Calculate minimum distance between two line segments."""
