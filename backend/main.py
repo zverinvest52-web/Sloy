@@ -1,6 +1,4 @@
-"""
-FastAPI application for Sloy - Drawing digitization service.
-"""
+"""FastAPI application for Sloy - Drawing digitization service."""
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,26 +11,27 @@ import cv2
 import numpy as np
 from pathlib import Path
 import shutil
+import os
 
 try:
-    # When running with `uvicorn main:app` from within the backend directory
     from image_processor import ImageProcessor, ProcessingResult
     from cad_converter import CADConverter, CADElements, Line, Circle, Rectangle
+    from config import Config
+    from services.integration import apply_cad_constraints_to_elements, get_processing_stats
 except ModuleNotFoundError:
-    # When running with `uvicorn backend.main:app` from repo root
     from backend.image_processor import ImageProcessor, ProcessingResult
     from backend.cad_converter import CADConverter, CADElements, Line, Circle, Rectangle
+    from backend.config import Config
+    from backend.services.integration import apply_cad_constraints_to_elements, get_processing_stats
 
 app = FastAPI(title="Sloy API", version="1.0.0")
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# CORS middleware
-import os
+# Log active configuration on startup
+logger.info(f"Sloy API starting - {Config.log_config()}")
 
-# CORS middleware
 _cors_allow_origins = [
     origin.strip()
     for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
@@ -41,10 +40,7 @@ _cors_allow_origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    # In the browser, CORS failures often surface as a generic "network error".
-    # Allow any localhost/127.0.0.1 dev port.
     allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
-    # Additional explicit origins, e.g. GitHub Pages: https://<user>.github.io
     allow_origins=_cors_allow_origins,
     allow_credentials=False,
     allow_methods=["*"],
@@ -61,15 +57,11 @@ for directory in [UPLOAD_DIR, PROCESSED_DIR, DXF_DIR]:
 
 
 class ProcessResponse(BaseModel):
-    """Response model for processing endpoint."""
     success: bool
     id: str
-    # For preview: "original" should already be perspective-corrected when available.
     original_url: Optional[str] = None
     processed_url: Optional[str] = None
-    # Raster preview drawn from the same extracted CAD elements that go into the DXF.
     vector_preview_url: Optional[str] = None
-    # Explicit field for the frontend; currently we also set original_url to this value.
     warped_original_url: Optional[str] = None
     dxf_url: Optional[str] = None
     error: Optional[str] = None
@@ -77,7 +69,6 @@ class ProcessResponse(BaseModel):
 
 
 class LineModel(BaseModel):
-    """Line model for export endpoint."""
     x1: float = Field(ge=-1e6, le=1e6)
     y1: float = Field(ge=-1e6, le=1e6)
     x2: float = Field(ge=-1e6, le=1e6)
@@ -85,14 +76,12 @@ class LineModel(BaseModel):
 
 
 class CircleModel(BaseModel):
-    """Circle model for export endpoint."""
     x: float = Field(ge=-1e6, le=1e6)
     y: float = Field(ge=-1e6, le=1e6)
     radius: float = Field(gt=0, le=1e6)
 
 
 class RectangleModel(BaseModel):
-    """Rectangle model for export endpoint."""
     x: float = Field(ge=-1e6, le=1e6)
     y: float = Field(ge=-1e6, le=1e6)
     width: float = Field(gt=0, le=1e6)
@@ -100,7 +89,6 @@ class RectangleModel(BaseModel):
 
 
 class ExportRequest(BaseModel):
-    """Request model for export endpoint."""
     lines: list[LineModel] = Field(default=[], max_length=10000)
     circles: list[CircleModel] = Field(default=[], max_length=10000)
     rectangles: list[RectangleModel] = Field(default=[], max_length=10000)
@@ -108,7 +96,6 @@ class ExportRequest(BaseModel):
 
 @app.get("/")
 async def root():
-    """Root endpoint."""
     return {
         "message": "Welcome to Sloy API",
         "version": "1.0.0",
@@ -122,76 +109,51 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
     return {"status": "healthy"}
 
 
 @app.post("/api/upload", response_model=ProcessResponse)
 async def upload_image(file: UploadFile = File(...)):
-    """
-    Upload and process an image.
-
-    Args:
-        file: Image file to process
-
-    Returns:
-        ProcessResponse with results
-    """
     try:
-        # Validate file type
         if not (file.content_type or "").startswith("image/"):
             raise HTTPException(400, "File must be an image")
 
-        # Generate unique ID
         file_id = str(uuid.uuid4())
-
-        # Save uploaded file
         suffix = Path(file.filename).suffix if file.filename else ".png"
         original_path = UPLOAD_DIR / f"{file_id}_original{suffix}"
         with original_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Process image
         processor = ImageProcessor()
         result = processor.process_image(str(original_path))
 
         if not result.success:
-            return ProcessResponse(
-                success=False,
-                id=file_id,
-                error=result.error
-            )
+            return ProcessResponse(success=False, id=file_id, error=result.error)
 
-        # Save processed image
         processed_path = PROCESSED_DIR / f"{file_id}_processed.png"
         cv2.imwrite(str(processed_path), result.processed_image)
 
-        # If we had perspective correction, save the warped image and use it as the
-        # "original" for preview (so original vs vector are aligned).
         warped_path = PROCESSED_DIR / f"{file_id}_warped.png"
         if result.warped_original_image is not None:
             cv2.imwrite(str(warped_path), result.warped_original_image)
         else:
             warped_path = original_path
 
-        # Convert to DXF
         converter = CADConverter(scale_factor=0.1)
         dxf_path = DXF_DIR / f"{file_id}.dxf"
 
-        success, elements = converter.process_image_to_dxf(
-            result.processed_image,
-            str(dxf_path)
-        )
+        # Extract elements
+        elements = converter.extract_elements(result.processed_image)
+
+        # Apply CAD constraints if enabled
+        elements = apply_cad_constraints_to_elements(elements, Config)
+
+        # Convert to DXF
+        success = converter.to_dxf(elements, str(dxf_path))
 
         if not success or elements is None:
-            return ProcessResponse(
-                success=False,
-                id=file_id,
-                error="Failed to generate DXF"
-            )
+            return ProcessResponse(success=False, id=file_id, error="Failed to generate DXF")
 
-        # Vector preview: rasterize the *same* extracted primitives used for the DXF.
-        # Render in image coordinate system (Y down) so it aligns with the preview original.
         vector_preview_path = PROCESSED_DIR / f"{file_id}_vector_preview.png"
         preview_h, preview_w = result.processed_image.shape[:2]
         preview = np.full((preview_h, preview_w), 255, dtype=np.uint8)
@@ -203,7 +165,6 @@ async def upload_image(file: UploadFile = File(...)):
         def to_px(x: float, y: float) -> tuple[int, int]:
             return (int(round(x / sf)), int(round(y / sf)))
 
-        # Outer geometry (polylines exported as LINEs in DXF)
         for pl in elements.polylines:
             pts = pl.points
             for i in range(len(pts) - 1):
@@ -213,11 +174,9 @@ async def upload_image(file: UploadFile = File(...)):
                 (x1, y1), (x2, y2) = pts[-1], pts[0]
                 cv2.line(preview, to_px(x1, y1), to_px(x2, y2), (0,), 2, lineType=cv2.LINE_AA)
 
-        # Interior / fallback lines
         for line in elements.lines:
             cv2.line(preview, to_px(line.x1, line.y1), to_px(line.x2, line.y2), (0,), 2, lineType=cv2.LINE_AA)
 
-        # Circles
         for circle in elements.circles:
             center = to_px(circle.x, circle.y)
             radius = int(round(circle.radius / sf))
@@ -226,7 +185,10 @@ async def upload_image(file: UploadFile = File(...)):
 
         cv2.imwrite(str(vector_preview_path), preview)
 
-        # Build response
+        # Get processing statistics
+        stats = get_processing_stats(elements)
+        stats['cad_solver_enabled'] = Config.USE_CAD_SOLVER
+
         return ProcessResponse(
             success=True,
             id=file_id,
@@ -235,14 +197,7 @@ async def upload_image(file: UploadFile = File(...)):
             processed_url=f"/api/files/{processed_path.name}",
             vector_preview_url=f"/api/files/{vector_preview_path.name}",
             dxf_url=f"/api/download/{file_id}",
-            metadata={
-                "polylines_detected": len(elements.polylines),
-                "lines_detected": (
-                    sum(max(0, len(pl.points) - 1) + (1 if pl.closed and len(pl.points) >= 2 else 0) for pl in elements.polylines)
-                    + len(elements.lines)
-                ),
-                "circles_detected": len(elements.circles)
-            }
+            metadata=stats
         )
 
     except Exception as e:
@@ -251,21 +206,10 @@ async def upload_image(file: UploadFile = File(...)):
 
 @app.get("/api/files/{filename}")
 async def get_file(filename: str):
-    """
-    Get uploaded or processed file.
-
-    Args:
-        filename: Name of the file
-
-    Returns:
-        File response
-    """
-    # Check in uploads
     file_path = UPLOAD_DIR / filename
     if file_path.exists():
         return FileResponse(file_path)
 
-    # Check in processed
     file_path = PROCESSED_DIR / filename
     if file_path.exists():
         return FileResponse(file_path)
@@ -275,53 +219,26 @@ async def get_file(filename: str):
 
 @app.get("/api/download/{file_id}")
 async def download_dxf(file_id: str):
-    """
-    Download DXF file.
-
-    Args:
-        file_id: ID of the processed file
-
-    Returns:
-        DXF file
-    """
     dxf_path = DXF_DIR / f"{file_id}.dxf"
 
     if not dxf_path.exists():
         raise HTTPException(404, "DXF file not found")
 
-    return FileResponse(
-        dxf_path,
-        media_type="application/dxf",
-        filename=f"drawing_{file_id}.dxf"
-    )
+    return FileResponse(dxf_path, media_type="application/dxf", filename=f"drawing_{file_id}.dxf")
 
 
 @app.post("/api/export")
 async def export_shapes(request: ExportRequest) -> FileResponse:
-    """
-    Export detected shapes to DXF R12 format.
-
-    Args:
-        request: ExportRequest with lists of shapes
-
-    Returns:
-        DXF file in R12 format
-
-    Raises:
-        HTTPException: 400 for validation errors, 500 for server errors
-    """
     file_id = str(uuid.uuid4())
     dxf_path = DXF_DIR / f"{file_id}.dxf"
 
     try:
-        # Convert request models to CAD elements
         lines = [Line(x1=l.x1, y1=l.y1, x2=l.x2, y2=l.y2) for l in request.lines]
         circles = [Circle(x=c.x, y=c.y, radius=c.radius) for c in request.circles]
         rectangles = [Rectangle(x=r.x, y=r.y, width=r.width, height=r.height) for r in request.rectangles]
 
         elements = CADElements(lines=lines, circles=circles, rectangles=rectangles)
 
-        # Export to DXF R12
         converter = CADConverter()
         success = converter.export_to_dxf_r12(elements, str(dxf_path))
 
@@ -329,20 +246,13 @@ async def export_shapes(request: ExportRequest) -> FileResponse:
             logger.error(f"DXF export failed for file_id={file_id}")
             raise HTTPException(500, "Failed to generate DXF file")
 
-        # Verify file was created
         if not dxf_path.exists():
             logger.error(f"DXF file not found after export: {dxf_path}")
             raise HTTPException(500, "Failed to generate DXF file")
 
-        # Return the file
-        return FileResponse(
-            dxf_path,
-            media_type="application/dxf",
-            filename=f"export_{file_id}.dxf"
-        )
+        return FileResponse(dxf_path, media_type="application/dxf", filename=f"export_{file_id}.dxf")
 
     except HTTPException:
-        # Cleanup on failure
         if dxf_path.exists():
             dxf_path.unlink()
         raise
