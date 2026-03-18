@@ -241,7 +241,7 @@ export default function ImageUploader({
                             onClick={() => setActiveId(img.id)}
                             className={`h-full w-full rounded-2xl overflow-hidden border-2 transition-all duration-200 ${
                               isActive
-                                ? 'border-blue-500 ring-4 ring-blue-500/20'
+                                ? 'border-[#6B9860] ring-4 ring-[#6B9860]/20'
                                 : 'border-black/10 hover:border-black/20'
                             }`}
                             aria-label="Выбрать изображение"
@@ -294,7 +294,7 @@ export default function ImageUploader({
                   {activeImage?.status === 'processing' && (
                     <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-10 rounded-3xl">
                       <div className="flex flex-col items-center gap-3">
-                        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <div className="w-12 h-12 border-4 border-[#6B9860] border-t-transparent rounded-full animate-spin"></div>
                         <div className="text-sm font-semibold text-gray-700">Обработка...</div>
                       </div>
                     </div>
