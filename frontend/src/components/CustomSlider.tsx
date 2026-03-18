@@ -89,7 +89,7 @@ export default function CustomSlider({ bottomImage, topImage }: CustomSliderProp
       aria-valuemax={100}
       aria-valuetext={`${Math.round(sliderPosition)}% векторизации видно`}
       tabIndex={0}
-      className="relative w-full h-full overflow-hidden rounded-2xl cursor-col-resize select-none focus:outline-none focus:ring-4 focus:ring-black/10"
+      className="relative w-full h-full overflow-hidden rounded-xl cursor-col-resize select-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2563EB]/20"
       onMouseDown={handleMouseDown}
       onTouchStart={handleMouseDown}
       onKeyDown={handleKeyDown}
@@ -117,15 +117,15 @@ export default function CustomSlider({ bottomImage, topImage }: CustomSliderProp
 
       {/* Slider line */}
       <div
-        className="absolute top-0 bottom-0 w-[3px] bg-white/90 shadow-[0_6px_18px_rgba(0,0,0,0.18)] pointer-events-none"
+        className="absolute top-0 bottom-0 w-[2px] bg-white shadow-lg pointer-events-none transition-opacity duration-200"
         style={{ left: `${sliderPosition}%` }}
         aria-hidden="true"
       >
         {/* Slider handle */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.18)] flex items-center justify-center pointer-events-auto">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[48px] min-h-[48px] w-12 h-12 bg-white rounded-full shadow-xl border-2 border-slate-200 flex items-center justify-center pointer-events-auto hover:scale-110 active:scale-95 transition-transform duration-200">
           <div className="flex gap-1" aria-hidden="true">
-            <div className="w-0.5 h-4 bg-gray-400"></div>
-            <div className="w-0.5 h-4 bg-gray-400"></div>
+            <div className="w-0.5 h-4 bg-slate-400 rounded-full"></div>
+            <div className="w-0.5 h-4 bg-slate-400 rounded-full"></div>
           </div>
         </div>
       </div>
