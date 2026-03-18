@@ -1,0 +1,18 @@
+
+# Test artifacts and debug files
+*_debug.dxf
+*_processed.png
+*_original_debug.dxf
+*_original_processed.png
+frame*_*.png
+comparison_*.png
+comparison_*.txt
+after_cad_solver.png
+before_cad_solver.png
+DIAGNOSTIC_INSTRUCTIONS.txt
+SPATIAL_OPTIMIZATION.md
+
+# Coverage reports
+coverage.xml
+.coverage
+htmlcov/
