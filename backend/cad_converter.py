@@ -673,8 +673,12 @@ class CADConverter:
         logger.info(f"Merging {len(lines)} line segments...")
 
         # Convert angle tolerance to radians
-        angle_tolerance_deg = 5.0
+        # Increased tolerance for diagonal lines
+        angle_tolerance_deg = 10.0  # Increased from 5.0 for better diagonal line merging
         angle_tol_rad = np.deg2rad(angle_tolerance_deg)
+
+        # Increased distance tolerance for better merging
+        distance_tolerance = threshold * 2.0  # More lenient for diagonal lines
 
         # Calculate angles for all lines
         lines_with_angles = []
@@ -713,7 +717,7 @@ class CADConverter:
                     continue  # Different angle
 
                 # Check if lines are collinear and close
-                if self._are_collinear_and_close(line1, line2, threshold):
+                if self._are_collinear_and_close(line1, line2, distance_tolerance):
                     group.append(line2)
                     used.add(j)
 
