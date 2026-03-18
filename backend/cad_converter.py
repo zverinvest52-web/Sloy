@@ -555,9 +555,22 @@ class CADConverter:
             if not is_duplicate:
                 circles.append(c)
 
-        # Merge any circles we promoted from polylines.
+        # Merge circles from polylines with detected circles
         if circles_from_polylines:
-            circles = circles_from_polylines
+            all_circles.extend(circles_from_polylines)
+
+        # Final deduplication of all circles
+        circles = []
+        for c in all_circles:
+            is_duplicate = False
+            for existing in circles:
+                dist = np.sqrt((c.x - existing.x)**2 + (c.y - existing.y)**2)
+                radius_diff = abs(c.radius - existing.radius)
+                if dist < 5.0 * self.scale_factor and radius_diff < 5.0 * self.scale_factor:
+                    is_duplicate = True
+                    break
+            if not is_duplicate:
+                circles.append(c)
 
         # 4) Lines: prefer interior lines, but keep multiple good candidates (not just the longest).
         #    This helps photos where Hough splits the same "wall-to-wall" line into segments.
