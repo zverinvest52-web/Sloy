@@ -518,10 +518,10 @@ class CADConverter:
                 else:
                     kept_polylines.append(pl)
 
-            # If we found any, keep only one most plausible circle (consistent with existing behavior)
+            # If we found any, keep ALL circles (not just one)
             if circles_from_polylines:
                 circles_from_polylines.sort(key=lambda c: c.radius)
-                circles_from_polylines = circles_from_polylines[:1]
+                # Keep all circles, not just the first one
                 polylines = kept_polylines
 
         # 2) Build residual image by erasing extracted polylines
